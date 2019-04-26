@@ -21,7 +21,7 @@ using namespace node;
 
 class Image : public ObjectWrap {
 public:
-  static Handle<Object> Initialize(Isolate *isolate);
+  static Local<Object> Initialize(Isolate *isolate);
   unsigned int GetWidth();
   unsigned int GetHeight();
   unsigned int GetNumChannels();
@@ -47,7 +47,7 @@ private:
   Nan::Persistent<ArrayBuffer> arrayBuffer;
   Nan::Persistent<Function> cbFn;
   std::string error;
-  uv_async_t threadAsync;
+  uv_async_t *threadAsyncHandle;
 
   friend class CanvasRenderingContext2D;
   friend class ImageData;

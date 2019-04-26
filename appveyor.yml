@@ -4,7 +4,7 @@ version: 0.0.{build}
 image:
   Visual Studio 2017
 environment:
-  nodejs_version: "10"
+  nodejs_version: "11"
   PFX_KEY:
     secure: rb5g/ykqdQek473qm/8WbnEQ6ItBfgcL1/ShqAMWLTH5+Z3Y45MHN2BB3UXdx067
 
@@ -21,14 +21,15 @@ test_script:
 
 after_test:
   - ps: |
-      wget "https://nodejs.org/dist/v10.6.0/node-v10.6.0-win-x64.zip" -OutFile node.zip
+      wget "https://nodejs.org/dist/v11.6.0/node-v11.6.0-win-x64.zip" -OutFile node.zip
       7z x node.zip
       rm node.zip
-      mv node-v10.6.0-win-x64 node
+      mv node-v11.6.0-win-x64 node
       $env:Path = "$pwd\node;$env:Path";
-      .\node\npm install
-      .\node\npm run test:ci
-      bash scripts/testRun.sh
+      .\node\npm install --no-optional
+      $env:TEST_ENV = 'ci'
+      .\node\npm run test
+      # bash scripts/testRun.sh
       set version "$env:APPVEYOR_REPO_TAG_NAME"
       if ([string]::IsNullOrEmpty("$version")) { set version "$env:APPVEYOR_REPO_COMMIT".Substring(0, 8) }
       mkdir dist
@@ -52,7 +53,7 @@ deploy:
   - provider: GitHub
     description: 'Exokit git'
     auth_token:
-      secure: qQU6Qfie9FkYGW1inshRh/P37b5KRsA4fGM4GjqRm8PlBlt1nSIctc5tXIq6WeyY
+      secure: ewZJqEOOh1B8ZWAJyd2dikQZ9BtcN4Cv04WEirXNDT8m9J06ZHgsw8hVcYmTinw8
     artifact: "exokit-windows.zip"
     draft: false
     prerelease: false
@@ -61,7 +62,7 @@ deploy:
   - provider: GitHub
     description: 'Exokit git'
     auth_token:
-      secure: qQU6Qfie9FkYGW1inshRh/P37b5KRsA4fGM4GjqRm8PlBlt1nSIctc5tXIq6WeyY
+      secure: ewZJqEOOh1B8ZWAJyd2dikQZ9BtcN4Cv04WEirXNDT8m9J06ZHgsw8hVcYmTinw8
     artifact: "exokit-windows-full.zip"
     draft: false
     prerelease: false
@@ -70,7 +71,7 @@ deploy:
   - provider: GitHub
     description: 'Exokit installer'
     auth_token:
-      secure: qQU6Qfie9FkYGW1inshRh/P37b5KRsA4fGM4GjqRm8PlBlt1nSIctc5tXIq6WeyY
+      secure: ewZJqEOOh1B8ZWAJyd2dikQZ9BtcN4Cv04WEirXNDT8m9J06ZHgsw8hVcYmTinw8
     artifact: "exokit-win-x64.exe"
     draft: false
     prerelease: false
@@ -85,6 +86,13 @@ notifications:
     on_build_success: false
     on_build_failure: true
     on_build_status_changed: true
+
+on_success:
+  - ps: Invoke-RestMethod https://raw.githubusercontent.com/exokitxr/appveyor-discord-webhook/master/send.ps1 -o send.ps1
+  - ps: ./send.ps1 success $env:WEBHOOK_URL
+on_failure:
+  - ps: Invoke-RestMethod https://raw.githubusercontent.com/exokitxr/appveyor-discord-webhook/master/send.ps1 -o send.ps1
+  - ps: ./send.ps1 failure $env:WEBHOOK_URL
 
 # Don't actually build.
 build: off

@@ -16,7 +16,7 @@ namespace webaudio {
 
 class Audio : public ObjectWrap {
 public:
-  static Handle<Object> Initialize(Isolate *isolate);
+  static Local<Object> Initialize(Isolate *isolate);
   void Load(uint8_t *bufferValue, size_t bufferLength);
   void Play();
   void Pause();
@@ -26,16 +26,23 @@ protected:
   static NAN_METHOD(Load);
   static NAN_METHOD(Play);
   static NAN_METHOD(Pause);
+  static NAN_GETTER(PausedGetter);
   static NAN_GETTER(CurrentTimeGetter);
+  static NAN_SETTER(CurrentTimeSetter);
   static NAN_GETTER(DurationGetter);
   static NAN_GETTER(LoopGetter);
   static NAN_SETTER(LoopSetter);
+  static NAN_GETTER(OnEndedGetter);
+  static NAN_SETTER(OnEndedSetter);
+  static void ProcessInMainThread(Audio *self);
+
+  Nan::Persistent<Function> onended;
 
   Audio();
   ~Audio();
 
 private:
-  shared_ptr<lab::SampledAudioNode> audioNode;
+  shared_ptr<lab::FinishableSourceNode> audioNode;
 
   friend class AudioSourceNode;
 };

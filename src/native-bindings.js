@@ -1,9 +1,31 @@
 const path = require('path');
-const exokitNode = require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node'));
-const {nativeAudio, nativeVr} = exokitNode;
-const WindowWorker = require('window-worker');
-const vmOne = require('vm-one');
+const {isMainThread} = require('worker_threads');
+
+/* const exokitNode = (() => {
+  const oldCwd = process.cwd();
+  const nodeModulesDir = path.resolve(path.dirname(require.resolve('native-graphics-deps')), '..');
+  process.chdir(nodeModulesDir);
+  const exokitNode = require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node'));
+  process.chdir(oldCwd);
+  return exokitNode;
+})(); */
+const {
+  exokitNode,
+  WindowWorker,
+  vmOne,
+} = (() => {
+  if (isMainThread) {
+    return {
+     exokitNode: require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node')),
+     WindowWorker: require('window-worker'),
+     vmOne: require('vm-one'),
+    };
+  } else {
+    return {};
+  }
+})();
 const webGlToOpenGl = require('webgl-to-opengl');
+const GlobalContext = require('./GlobalContext');
 
 const bindings = {};
 for (const k in exokitNode) {
@@ -11,6 +33,8 @@ for (const k in exokitNode) {
 }
 bindings.nativeWorker = WindowWorker;
 bindings.nativeVm = vmOne;
+const isAndroid = bindings.nativePlatform === 'android';
+const glslVersion = isAndroid ? '300 es' : '330';
 const _decorateGlIntercepts = gl => {
   gl.createShader = (createShader => function(type) {
     const result = createShader.call(this, type);
@@ -19,9 +43,9 @@ const _decorateGlIntercepts = gl => {
   })(gl.createShader);
   gl.shaderSource = (shaderSource => function(shader, source) {
     if (shader.type === gl.VERTEX_SHADER) {
-      source = webGlToOpenGl.vertex(source);
+      source = webGlToOpenGl.vertex(source, glslVersion);
     } else if (shader.type === gl.FRAGMENT_SHADER) {
-      source = webGlToOpenGl.fragment(source);
+      source = webGlToOpenGl.fragment(source, glslVersion);
     }
     return shaderSource.call(this, shader, source);
   })(gl.shaderSource);
@@ -53,12 +77,8 @@ bindings.nativeGl = (nativeGl => {
   function WebGLRenderingContext(canvas) {
     const gl = new nativeGl();
     _decorateGlIntercepts(gl);
-
-    if (WebGLRenderingContext.onconstruct(gl, canvas)) {
-      return gl;
-    } else {
-      return null;
-    }
+    WebGLRenderingContext.onconstruct(gl, canvas);
+    return gl;
   }
   for (const k in nativeGl) {
     WebGLRenderingContext[k] = nativeGl[k];
@@ -70,12 +90,8 @@ bindings.nativeGl2 = (nativeGl2 => {
   function WebGL2RenderingContext(canvas) {
     const gl = new nativeGl2();
     _decorateGlIntercepts(gl);
-
-    if (WebGLRenderingContext.onconstruct(gl, canvas)) {
-      return gl;
-    } else {
-      return null;
-    }
+    bindings.nativeGl.onconstruct(gl, canvas);
+    return gl;
   }
   for (const k in nativeGl2) {
     WebGL2RenderingContext[k] = nativeGl2[k];
@@ -83,10 +99,59 @@ bindings.nativeGl2 = (nativeGl2 => {
   return WebGL2RenderingContext;
 })(bindings.nativeGl2);
 
-const {PannerNode} = nativeAudio;
-PannerNode.setPath(path.join(require.resolve('native-audio-deps').slice(0, -'index.js'.length), 'assets', 'hrtf'));
-if (nativeVr) {
-	nativeVr.EVRInitError = {
+bindings.nativeCanvasRenderingContext2D = (nativeCanvasRenderingContext2D => {
+  function CanvasRenderingContext2D(canvas) {
+    const ctx = new nativeCanvasRenderingContext2D();
+    CanvasRenderingContext2D.onconstruct(ctx, canvas);
+    return ctx;
+  }
+  for (const k in nativeCanvasRenderingContext2D) {
+    CanvasRenderingContext2D[k] = nativeCanvasRenderingContext2D[k];
+  }
+  CanvasRenderingContext2D.onconstruct = null;
+  return CanvasRenderingContext2D;
+})(bindings.nativeCanvasRenderingContext2D);
+GlobalContext.CanvasRenderingContext2D = bindings.nativeCanvasRenderingContext2D;
+GlobalContext.WebGLRenderingContext = bindings.nativeGl;
+GlobalContext.WebGL2RenderingContext = bindings.nativeGl2;
+
+if (bindings.nativeAudio) {
+  bindings.nativeAudio.AudioContext = (OldAudioContext => class AudioContext extends OldAudioContext {
+    decodeAudioData(arrayBuffer, successCallback, errorCallback) {
+      return new Promise((resolve, reject) => {
+        try {
+          let audioBuffer = this._decodeAudioDataSync(arrayBuffer);
+          if (successCallback) {
+            process.nextTick(() => {
+              try {
+                successCallback(audioBuffer);
+              } catch(err) {
+                console.warn(err);
+              }
+            });
+          }
+          resolve(audioBuffer);
+        } catch(err) {
+          console.warn(err);
+          if (errorCallback) {
+            process.nextTick(() => {
+              try {
+                errorCallback(err);
+              } catch(err) {
+                console.warn(err);
+              }
+            });
+          }
+          reject(err);
+        }
+      });
+    }
+  })(bindings.nativeAudio.AudioContext);
+  bindings.nativeAudio.PannerNode.setPath(path.join(require.resolve('native-audio-deps').slice(0, -'index.js'.length), 'assets', 'hrtf'));
+}
+
+if (bindings.nativeOpenVR) {
+	bindings.nativeOpenVR.EVRInitError = {
 	  None: 0,
 	  Unknown: 1,
 
@@ -174,7 +239,7 @@ if (nativeVr) {
 	  Steam_SteamInstallationNotFound: 2000,
 	};
 
-	nativeVr.EVRApplicationType = {
+	bindings.nativeOpenVR.EVRApplicationType = {
 	  Other: 0,
 	  Scene: 1,
 	  Overlay: 2,
@@ -185,18 +250,18 @@ if (nativeVr) {
 	  Bootstrapper: 7,
 	};
 
-	nativeVr.EVREye = {
+	bindings.nativeOpenVR.EVREye = {
 	  Left: 0,
 	  Right: 1,
 	};
 
-	nativeVr.ETrackingUniverseOrigin = {
+	bindings.nativeOpenVR.ETrackingUniverseOrigin = {
 	  Seated: 0,
 	  Standing: 1,
 	  RawAndUncalibrated: 2,
 	};
 
-	nativeVr.ETrackingResult = {
+	bindings.nativeOpenVR.ETrackingResult = {
 	  Uninitialized: 1,
 	  Calibrating_InProgress: 100,
 	  Calibrating_OutOfRange: 101,
@@ -204,7 +269,7 @@ if (nativeVr) {
 	  Running_OutOfRange: 201,
 	};
 
-	nativeVr.ETrackedDeviceClass = {
+	bindings.nativeOpenVR.ETrackedDeviceClass = {
 	  Invalid: 0,
 	  HMD: 1,
 	  Controller: 2,
@@ -213,4 +278,11 @@ if (nativeVr) {
 	  DisplayRedirect: 5,
 	};
 }
+
+GlobalContext.nativeOpenVR = bindings.nativeOpenVR;
+GlobalContext.nativeOculusMobileVr = bindings.nativeOculusMobileVr;
+GlobalContext.nativeMl = bindings.nativeMl;
+GlobalContext.nativeBrowser = bindings.nativeBrowser;
+GlobalContext.nativeOculusVR = bindings.nativeOculusVR;
+
 module.exports = bindings;

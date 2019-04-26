@@ -1,7 +1,10 @@
-const parseIntStrict = require('parse-int');
+const path = require('path');
+const fs = require('fs');
 const url = require('url');
-const GlobalContext = require('./GlobalContext');
+
 const symbols = require('./symbols');
+const mkdirp = require('mkdirp');
+const parseIntStrict = require('parse-int');
 
 function _getBaseUrl(u) {
   let baseUrl;
@@ -12,8 +15,7 @@ function _getBaseUrl(u) {
     baseUrl = url.format({
       protocol: parsedUrl.protocol || 'http:',
       host: parsedUrl.host || '127.0.0.1',
-      pathname: parsedUrl.pathname,
-      search: parsedUrl.search,
+      pathname: parsedUrl.pathname.replace(/\/[^\/]*\.[^\/]*$/, '') || '/',
     });
   }
   if (!/\/$/.test(baseUrl) && !/\./.test(baseUrl.match(/\/([^\/]*)$/)[1])) {
@@ -127,12 +129,12 @@ const _normalizePrototype = (obj, targetContext) => {
 
   // Normalize to window prototype.
   if (isToWindow) {
-    GlobalContext.nativeVm.setPrototype(obj, targetContext[symbols.prototypesSymbol][name].prototype || targetContext[name].prototype);
+    Object.setPrototypeOf(obj, targetContext[symbols.prototypesSymbol][name].prototype || targetContext[name].prototype);
     return obj;
   }
 
   // Normalize to native prototype.
-  GlobalContext.nativeVm.setPrototype(obj, targetContext[name].prototype);
+  Object.setPrototypeOf(obj, targetContext[name].prototype);
   return obj;
 };
 module.exports._normalizePrototype = _normalizePrototype;
@@ -148,17 +150,46 @@ module.exports._storeOriginalWindowPrototypes = function (window, prototypesSymb
   });
 };
 
-const _elementGetter = (self, attribute) => self.listeners(attribute)[0];
+const _elementGetter = (self, attribute) => self.listeners(attribute).filter(l => l[symbols.listenerSymbol])[0];
 module.exports._elementGetter = _elementGetter;
 
 const _elementSetter = (self, attribute, cb) => {
+  const listener = _elementGetter(self, attribute);
+  if (listener) {
+    self.removeEventListener(attribute, listener);
+    listener[symbols.listenerSymbol] = false;
+  }
+  
   if (typeof cb === 'function') {
     self.addEventListener(attribute, cb);
-  } else {
-    const listeners = self.listeners(attribute);
-    for (let i = 0; i < listeners.length; i++) {
-      self.removeEventListener(attribute, listeners[i]);
-    }
+    cb[symbols.listenerSymbol] = true;
   }
 };
 module.exports._elementSetter = _elementSetter;
+
+const _download = (m, u, data, bufferifyFn, dstDir) => new Promise((accept, reject) => {
+  if (m === 'GET' && /^(?:https?|file):/.test(u)) {
+    const o = url.parse(u);
+    const d = path.resolve(path.join(__dirname, '..'), dstDir, o.host || '.');
+    const f = path.join(d, o.pathname === '/' ? 'index.html' : o.pathname);
+
+    console.log(`${u} -> ${f}`);
+
+    mkdirp(path.dirname(f), err => {
+      if (!err) {
+        fs.writeFile(f, bufferifyFn(data), err => {
+          if (!err) {
+            accept(data);
+          } else {
+            reject(err);
+          }
+        });
+      } else {
+        reject(err);
+      }
+    });
+  } else {
+    accept(data);
+  }
+});
+module.exports._download = _download;

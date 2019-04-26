@@ -1,218 +1,41 @@
 #include <egl/include/egl.h>
+#include <windowsystem.h>
 #include <webgl.h>
 
 namespace egl {
 
-// @Module: Window handling
-NATIVEwindow *currentWindow = nullptr;
+constexpr EGLint glMajorVersion = 3;
+constexpr EGLint glMinorVersion = 2;
+
+thread_local NATIVEwindow *currentWindow = nullptr;
 int lastX = 0, lastY = 0; // XXX track this per-window
 std::unique_ptr<Nan::Persistent<Function>> eventHandler;
 
-void NAN_INLINE(CallEmitter(int argc, Local<Value> argv[])) {
-  if (eventHandler && !(*eventHandler).IsEmpty()) {
-    Local<Function> eventHandlerFn = Nan::New(*eventHandler);
-    eventHandlerFn->Call(Nan::Null(), argc, argv);
-  }
+void Initialize() {
+  EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+
+  EGLint major, minor;
+  eglInitialize(display, &major, &minor);
+  eglBindAPI(EGL_OPENGL_API);
 }
 
-NAN_METHOD(CreateRenderTarget) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(Local<Object>::Cast(info[0]));
-  int width = info[1]->Uint32Value();
-  int height = info[2]->Uint32Value();
-  GLuint sharedColorTex = info[3]->Uint32Value();
-  GLuint sharedDepthStencilTex = info[4]->Uint32Value();
-  GLuint sharedMsColorTex = info[5]->Uint32Value();
-  GLuint sharedMsDepthStencilTex = info[6]->Uint32Value();
+void Uninitialize() {
+  EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
-  const int samples = 4;
-
-  GLuint fbo;
-  GLuint colorTex;
-  GLuint depthStencilTex;
-  GLuint msFbo;
-  GLuint msColorTex;
-  GLuint msDepthStencilTex;
-
-  {
-    glGenFramebuffers(1, &msFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, msFbo);
-
-    if (!sharedMsDepthStencilTex) {
-      glGenTextures(1, &msDepthStencilTex);
-    } else {
-      msDepthStencilTex = sharedMsDepthStencilTex;
-    }
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, msDepthStencilTex);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH24_STENCIL8, width, height, true);
-    // glFramebufferTexture2DMultisampleEXT(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, msDepthStencilTex, 0, samples);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, msDepthStencilTex, 0);
-
-    if (!sharedMsColorTex) {
-      glGenTextures(1, &msColorTex);
-    } else {
-      msColorTex = sharedMsColorTex;
-    }
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, msColorTex);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA8, width, height, true);
-    // glFramebufferTexture2DMultisampleEXT(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, msColorTex, 0, samples);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, msColorTex, 0);
-  }
-  {
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-
-    if (!sharedDepthStencilTex) {
-      glGenTextures(1, &depthStencilTex);
-    } else {
-      depthStencilTex = sharedDepthStencilTex;
-    }
-    glBindTexture(GL_TEXTURE_2D, depthStencilTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthStencilTex, 0);
-
-    if (!sharedColorTex) {
-      glGenTextures(1, &colorTex);
-    } else {
-      colorTex = sharedColorTex;
-    }
-    glBindTexture(GL_TEXTURE_2D, colorTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
-  }
-
-  Local<Value> result;
-  GLenum framebufferStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
-  if (framebufferStatus == GL_FRAMEBUFFER_COMPLETE) {
-    Local<Array> array = Array::New(Isolate::GetCurrent(), 6);
-    array->Set(0, JS_NUM(fbo));
-    array->Set(1, JS_NUM(colorTex));
-    array->Set(2, JS_NUM(depthStencilTex));
-    array->Set(3, JS_NUM(msFbo));
-    array->Set(4, JS_NUM(msColorTex));
-    array->Set(5, JS_NUM(msDepthStencilTex));
-    result = array;
-  } else {
-    result = Null(Isolate::GetCurrent());
-  }
-  info.GetReturnValue().Set(result);
-
-  if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
-  } else {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D)) {
-    glBindTexture(GL_TEXTURE_2D, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D));
-  } else {
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE)) {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE));
-  } else {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP)) {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP));
-  } else {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  }
-}
-
-NAN_METHOD(ResizeRenderTarget) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(Local<Object>::Cast(info[0]));
-  int width = info[1]->Uint32Value();
-  int height = info[2]->Uint32Value();
-  GLuint fbo = info[3]->Uint32Value();
-  GLuint colorTex = info[4]->Uint32Value();
-  GLuint depthStencilTex = info[5]->Uint32Value();
-  GLuint msFbo = info[6]->Uint32Value();
-  GLuint msColorTex = info[7]->Uint32Value();
-  GLuint msDepthStencilTex = info[8]->Uint32Value();
-
-  const int samples = 4;
-
-  {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, msFbo);
-
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, msDepthStencilTex);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH24_STENCIL8, width, height, true);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, msDepthStencilTex, 0);
-
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, msColorTex);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA8, width, height, true);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, msColorTex, 0);
-  }
-  {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-
-    glBindTexture(GL_TEXTURE_2D, depthStencilTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthStencilTex, 0);
-
-    glBindTexture(GL_TEXTURE_2D, colorTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
-  }
-
-  if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
-  } else {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D)) {
-    glBindTexture(GL_TEXTURE_2D, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D));
-  } else {
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE)) {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE));
-  } else {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP)) {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP));
-  } else {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  }
-}
-
-NAN_METHOD(DestroyRenderTarget) {
-  if (info[0]->IsNumber() && info[1]->IsNumber() && info[2]->IsNumber()) {
-    GLuint fbo = info[0]->Uint32Value();
-    GLuint tex = info[1]->Uint32Value();
-    GLuint depthTex = info[2]->Uint32Value();
-
-    glDeleteFramebuffers(1, &fbo);
-    glDeleteTextures(1, &tex);
-    glDeleteTextures(1, &depthTex);
-  } else {
-    Nan::ThrowError("DestroyRenderTarget: invalid arguments");
-  }
+  eglTerminate(display);
 }
 
 NAN_METHOD(BlitFrameBuffer) {
   Local<Object> glObj = Local<Object>::Cast(info[0]);
-  GLuint fbo1 = info[1]->Uint32Value();
-  GLuint fbo2 = info[2]->Uint32Value();
-  int sw = info[3]->Uint32Value();
-  int sh = info[4]->Uint32Value();
-  int dw = info[5]->Uint32Value();
-  int dh = info[6]->Uint32Value();
-  bool color = info[7]->BooleanValue();
-  bool depth = info[8]->BooleanValue();
-  bool stencil = info[9]->BooleanValue();
+  GLuint fbo1 = TO_UINT32(info[1]);
+  GLuint fbo2 = TO_UINT32(info[2]);
+  int sw = TO_INT32(info[3]);
+  int sh = TO_INT32(info[4]);
+  int dw = TO_INT32(info[5]);
+  int dh = TO_INT32(info[6]);
+  bool color = TO_BOOL(info[7]);
+  bool depth = TO_BOOL(info[8]);
+  bool stencil = TO_BOOL(info[9]);
 
   glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo1);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo2);
@@ -253,7 +76,7 @@ void SetCurrentWindowContext(NATIVEwindow *window) {
 void ReadPixels(WebGLRenderingContext *gl, unsigned int fbo, int x, int y, int width, int height, unsigned int format, unsigned int type, unsigned char *data) {
   glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
   glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
-  
+
   if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
   } else {
@@ -277,8 +100,8 @@ void GetWindowSize(NATIVEwindow *window, int *width, int *height) {
 
 NAN_METHOD(GetWindowSize) {
   NATIVEwindow *window = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
-  int width, height;
 
+  int width, height;
   GetWindowSize(window, &width, &height);
 
   Local<Object> result = Nan::New<Object>();
@@ -287,10 +110,17 @@ NAN_METHOD(GetWindowSize) {
   info.GetReturnValue().Set(result);
 }
 
+void SetWindowSize(NATIVEwindow *window, int width, int height) {
+  window->width = width;
+  window->height = height;
+}
+
 NAN_METHOD(SetWindowSize) {
   NATIVEwindow *window = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
-  window->width = info[1]->Uint32Value();
-  window->height = info[2]->Uint32Value();
+  int width = TO_INT32(info[1]);
+  int height = TO_INT32(info[2]);
+
+  SetWindowSize(window, width, height);
 }
 
 NAN_METHOD(SetWindowPos) {
@@ -304,16 +134,28 @@ NAN_METHOD(GetWindowPos) {
   info.GetReturnValue().Set(result);
 }
 
+void GetFramebufferSize(NATIVEwindow *window, int *width, int *height) {
+  *width = window->width;
+  *height = window->height;
+}
+
 NAN_METHOD(GetFramebufferSize) {
   NATIVEwindow *window = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
 
+  int width, height;
+  GetFramebufferSize(window, &width, &height);
+
   Local<Object> result = Nan::New<Object>();
-  result->Set(JS_STR("width"),JS_INT(window->width));
-  result->Set(JS_STR("height"),JS_INT(window->height));
+  result->Set(JS_STR("width"),JS_INT(width));
+  result->Set(JS_STR("height"),JS_INT(height));
   info.GetReturnValue().Set(result);
 }
 
-void *GetGLContext(NATIVEwindow *window) {
+NAN_METHOD(GetDevicePixelRatio) {
+  info.GetReturnValue().Set(JS_NUM(1));
+}
+
+EGLContext GetGLContext(NATIVEwindow *window) {
   return window->context;
 }
 
@@ -345,22 +187,21 @@ NAN_METHOD(ExitFullscreen) {
   // nothing
 }
 
-NAN_METHOD(Create) {
-  unsigned int width = info[0]->Uint32Value();
-  unsigned int height = info[1]->Uint32Value();
-  bool initialVisible = info[2]->BooleanValue();
-  bool hidden = info[3]->BooleanValue();
-  NATIVEwindow *sharedWindow = info[4]->IsArray() ? (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[4])) : nullptr;
-  WebGLRenderingContext *gl = info[5]->IsObject() ? ObjectWrap::Unwrap<WebGLRenderingContext>(Local<Object>::Cast(info[5])) : nullptr;
-
+NATIVEwindow *CreateNativeWindow(unsigned int width, unsigned int height, bool visible, NATIVEwindow *sharedWindow) {
   EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
-  EGLint major = 4;
-  EGLint minor = 0;
-  eglInitialize(display, &major, &minor);
-  eglBindAPI(EGL_OPENGL_API);
-
   EGLint config_attribs[] = {
+#ifdef ANDROID
+    EGL_RED_SIZE, 8,
+    EGL_GREEN_SIZE, 8,
+    EGL_BLUE_SIZE, 8,
+    EGL_ALPHA_SIZE, 8, // need alpha for the multi-pass timewarp compositor
+    EGL_DEPTH_SIZE, 24,
+    EGL_STENCIL_SIZE, 8,
+    EGL_SAMPLES, 0,
+    EGL_NONE
+#endif
+#ifdef LUMIN
     EGL_RED_SIZE, 5,
     EGL_GREEN_SIZE, 6,
     EGL_BLUE_SIZE, 5,
@@ -368,25 +209,50 @@ NAN_METHOD(Create) {
     EGL_DEPTH_SIZE, 24,
     EGL_STENCIL_SIZE, 8,
     EGL_NONE
+#endif
   };
   EGLConfig egl_config = nullptr;
   EGLint config_size = 0;
   eglChooseConfig(display, config_attribs, &egl_config, 1, &config_size);
 
   EGLint context_attribs[] = {
-    EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
-    EGL_CONTEXT_MINOR_VERSION_KHR, 2,
+    EGL_CONTEXT_MAJOR_VERSION_KHR, glMajorVersion,
+    EGL_CONTEXT_MINOR_VERSION_KHR, glMinorVersion,
     EGL_NONE
   };
-  EGLContext context = eglCreateContext(display, egl_config, EGL_NO_CONTEXT, context_attribs);
 
-  eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+  EGLContext context = eglCreateContext(display, egl_config, sharedWindow ? GetGLContext(sharedWindow) : EGL_NO_CONTEXT, context_attribs);
 
-  NATIVEwindow *windowHandle = new NATIVEwindow{display, context, width, height};
+  return new NATIVEwindow{display, context, width, height};
+}
 
-  GLuint framebuffers[] = {0, 0};
-  GLuint framebufferTextures[] = {0, 0, 0, 0};
+NAN_METHOD(Create3D) {
+  unsigned int width = TO_UINT32(info[0]);
+  unsigned int height = TO_UINT32(info[1]);
+  bool initialVisible = TO_BOOL(info[2]);
+  NATIVEwindow *sharedWindow = info[3]->IsArray() ? (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[3])) : nullptr;
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(Local<Object>::Cast(info[4]));
+
+  NATIVEwindow *windowHandle = CreateNativeWindow(width, height, initialVisible, sharedWindow);
   
+  GLuint framebuffers[2];
+  GLuint framebufferTextures[4];
+  if (sharedWindow != nullptr) {
+    SetCurrentWindowContext(sharedWindow);
+
+    glGenFramebuffers(sizeof(framebuffers)/sizeof(framebuffers[0]), framebuffers);
+    glGenTextures(sizeof(framebufferTextures)/sizeof(framebufferTextures[0]), framebufferTextures);
+    
+    SetCurrentWindowContext(windowHandle);
+  } else {
+    SetCurrentWindowContext(windowHandle);
+    
+    glGenFramebuffers(sizeof(framebuffers)/sizeof(framebuffers[0]), framebuffers);
+    glGenTextures(sizeof(framebufferTextures)/sizeof(framebufferTextures[0]), framebufferTextures);
+  }
+
+  windowsystembase::InitializeLocalGlState(gl);
+
   GLuint vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
@@ -411,10 +277,35 @@ NAN_METHOD(Create) {
   info.GetReturnValue().Set(result);
 }
 
+NAN_METHOD(Create2D) {
+  unsigned int width = TO_UINT32(info[0]);
+  unsigned int height = TO_UINT32(info[1]);
+  NATIVEwindow *sharedWindow = info[2]->IsArray() ? (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[2])) : nullptr;
+
+  NATIVEwindow *windowHandle = CreateNativeWindow(width, height, false, sharedWindow);
+
+  GLuint tex;
+  if (sharedWindow != nullptr) {
+    SetCurrentWindowContext(sharedWindow);
+
+    glGenTextures(1, &tex);
+    
+    SetCurrentWindowContext(windowHandle);
+  } else {
+    SetCurrentWindowContext(windowHandle);
+    
+    glGenTextures(1, &tex);
+  }
+
+  Local<Array> result = Nan::New<Array>(2);
+  result->Set(0, pointerToArray(windowHandle));
+  result->Set(1, JS_INT(tex));
+  info.GetReturnValue().Set(result);
+}
+
 NAN_METHOD(Destroy) {
   NATIVEwindow *window = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
   eglDestroyContext(window->display, window->context);
-  eglTerminate(window->display);
   delete window;
 }
 
@@ -459,12 +350,17 @@ NAN_METHOD(SetClipboard) {
 ///////////////////////////////////////////////////////////////////////////////
 
 Local<Object> makeWindow() {
+  egl::Initialize();
+
   Isolate *isolate = Isolate::GetCurrent();
   v8::EscapableHandleScope scope(isolate);
 
   Local<Object> target = Object::New(isolate);
 
-  Nan::SetMethod(target, "create", egl::Create);
+  windowsystembase::Decorate(target);
+
+  Nan::SetMethod(target, "create3d", egl::Create3D);
+  Nan::SetMethod(target, "create2d", egl::Create2D);
   Nan::SetMethod(target, "destroy", egl::Destroy);
   Nan::SetMethod(target, "show", egl::Show);
   Nan::SetMethod(target, "hide", egl::Hide);
@@ -477,6 +373,7 @@ Local<Object> makeWindow() {
   Nan::SetMethod(target, "setWindowPos", egl::SetWindowPos);
   Nan::SetMethod(target, "getWindowPos", egl::GetWindowPos);
   Nan::SetMethod(target, "getFramebufferSize", egl::GetFramebufferSize);
+  Nan::SetMethod(target, "getDevicePixelRatio", egl::GetDevicePixelRatio);
   Nan::SetMethod(target, "iconifyWindow", egl::IconifyWindow);
   Nan::SetMethod(target, "restoreWindow", egl::RestoreWindow);
   Nan::SetMethod(target, "setEventHandler", egl::SetEventHandler);
@@ -487,9 +384,6 @@ Local<Object> makeWindow() {
   Nan::SetMethod(target, "setCursorPosition", egl::SetCursorPosition);
   Nan::SetMethod(target, "getClipboard", egl::GetClipboard);
   Nan::SetMethod(target, "setClipboard", egl::SetClipboard);
-  Nan::SetMethod(target, "createRenderTarget", egl::CreateRenderTarget);
-  Nan::SetMethod(target, "resizeRenderTarget", egl::ResizeRenderTarget);
-  Nan::SetMethod(target, "destroyRenderTarget", egl::DestroyRenderTarget);
   Nan::SetMethod(target, "blitFrameBuffer", egl::BlitFrameBuffer);
   Nan::SetMethod(target, "setCurrentWindowContext", egl::SetCurrentWindowContext);
 

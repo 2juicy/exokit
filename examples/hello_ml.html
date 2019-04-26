@@ -1,5 +1,19 @@
 <html>
   <head>
+   <meta charset="utf-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <meta name="theme-color" content="#008000"/>
+   <title>hello_ml</title>
+   <link rel="manifest" href="hello_ml_manifest.json">
+   <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/hello_ml_sw.js')
+        .then(function() {
+              console.log('Service Worker Registered');
+        });
+    }
+   </script>
     <style>
       body {
         margin: 0;
@@ -7,9 +21,9 @@
     </style>
   </head>
   <body>
+  <h1>hello_ml</h1>
   <script src="three.js"></script>
-  <script src="inflate.min.js"></script>
-  <script src="FBXLoader.js"></script>
+  <script src="GLTFLoader.js"></script>
   <script>
     let container, scene, camera, display, model, controllerMeshes, eyeMesh;
     let mesher = null, planeTracker = null, handTracker = null, eyeTracker = null;
@@ -29,6 +43,7 @@
       mesh.frustumCulled = false;
       return mesh;
     };
+    const _getControllerIndex = inputSource => inputSource.handedness === 'left' ? 0 : 1;
 
     function init() {
       container = document.createElement('div');
@@ -50,49 +65,6 @@
       directionalLight.position.set(1, 1, 1);
       scene.add(directionalLight);
 
-      /* (() => {
-        const geometry = new THREE.BoxBufferGeometry(0.1, 1, 0.1);
-        const material = new THREE.MeshPhongMaterial({
-          color: 0xE91E63,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.y = 0.5;
-        // mesh.position.z = -1;
-        mesh.frustumCuled = false;
-        scene.add(mesh);
-      })();
-      (() => {
-        const geometry = new THREE.BoxBufferGeometry(0.1, 0.1, 0.1);
-        const material = new THREE.MeshPhongMaterial({
-          color: 0x4CAF50,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.y = 1 + 0.1;
-        // mesh.position.z = -1;
-        mesh.frustumCulled = false;
-        scene.add(mesh);
-      })(); */
-
-      const loader = new THREE.FBXLoader();
-      loader.load('exokit.fbx', object => {
-        /* object.quaternion.setFromUnitVectors(
-          new THREE.Vector3(0, 0, 1),
-          new THREE.Vector3(0.5, 0, 1).normalize()
-        ); */
-        object.scale.multiplyScalar(0.001);
-        object.matrix.compose(object.position, object.quaternion, object.scale);
-        object.updateMatrixWorld(true);
-        // object.frustumCulled = false;
-
-        object.traverse(child => {
-          child.frustumCulled = false;
-        });
-
-        model = object;
-
-        scene.add(object);
-      });
-
       controllerMeshes = [
         _makeControllerMesh(-0.1),
         _makeControllerMesh(0.1),
@@ -100,6 +72,42 @@
       controllerMeshes.forEach(controllerMesh => {
         scene.add(controllerMesh);
       });
+
+      {
+        const loader = new THREE.GLTFLoader(); // .setPath( 'models/' );
+        loader.load( 'exobot.glb', function ( o ) {
+
+          o = o.scene;
+
+          // o.position.z = -1;
+          o.rotation.order = 'YXZ';
+          o.scale.set(0.2, 0.2, 0.2);
+          /* o.traverse(e => {
+            e.castShadow = true;
+          }); */
+
+          /* o.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(0, 0, 1)
+          ); */
+          o.updateMatrixWorld();
+          // o.frustumCulled = false;
+          for (let i = 0; i < o.children.length; i++) {
+            o.children[i].frustumCulled = false;
+          }
+
+          model = o;
+
+          scene.add(o);
+          // scene.add(o.children[0]);
+          // scene.add(o.children[0]);
+
+        }, undefined, function ( e ) {
+
+          console.error( e );
+
+        } );
+      }
 
       eyeMesh = (() => {
         const geometry = new THREE.BoxBufferGeometry(0.05, 0.05, 0.05);
@@ -262,11 +270,15 @@
         const material = terrainMaterial;
 
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.meshId = meshId;
+        mesh.matrixAutoUpdate = false;
         mesh.frustumCulled = false;
+        mesh.meshId = meshId;
         return mesh;
       };
-      const _loadTerrainMesh = (terrainMesh, {positionBuffer, positionCount, normalBuffer, normalCount, indexBuffer, count}) => {
+      const _loadTerrainMesh = (terrainMesh, {transformMatrix, positionBuffer, positionCount, normalBuffer, normalCount, indexBuffer, count}) => {
+        terrainMesh.matrix.fromArray(transformMatrix);
+        terrainMesh.matrixWorldNeedsUpdate = true;
+
         const {geometry} = terrainMesh;
         const attributes = renderer.getAttributes();
 
@@ -369,16 +381,18 @@
 
         enabled = false;
       };
-      _enable();
-      window.addEventListener('keydown', e => {
-        if (e.keyCode === 13) { // enter
-          if (enabled) {
-            _disable();
-          } else {
-            _enable();
+      if (window.browser && window.browser.magicleap) {
+        _enable();
+        window.addEventListener('keydown', e => {
+          if (e.keyCode === 13) { // enter
+            if (enabled) {
+              _disable();
+            } else {
+              _enable();
+            }
           }
-        }
-      });
+        });
+      }
 
       renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -399,10 +413,14 @@
       if (model) {
         const animationTime = 4000;
         const f = ((Date.now() % animationTime) / animationTime) * (Math.PI * 2);
-        model.quaternion.setFromUnitVectors(
+        model.position.y = Math.sin(f) * 0.05;
+        // model.rotation.x = Math.sin(f*4) * Math.PI*2*0.05;
+        model.rotation.y = Math.sin(f*2) * Math.PI*2*0.05;
+        model.rotation.z = Math.cos(f*2) * Math.PI*2*0.05;
+        /* model.quaternion.setFromUnitVectors(
           new THREE.Vector3(0, 0, 1),
           new THREE.Vector3(Math.cos(f), 0, Math.sin(f)).normalize()
-        );
+        ); */
         model.updateMatrixWorld();
       }
       if (eyeTracker) {
@@ -418,15 +436,20 @@
         eyeMesh.visible = false;
       }
       if (renderer.vr.enabled) {
-        const inputSources = display.session.getInputSources();
+        for (let i = 0; i < controllerMeshes.length; i++) {
+          controllerMeshes[i].visible = false;
+        }
 
+        const inputSources = display.session.getInputSources();
         for (let i = 0; i < inputSources.length; i++) {
           const inputSource = inputSources[i];
           const pose = frame.getInputPose(inputSource);
 
-          const controllerMesh = controllerMeshes[i];
-          controllerMesh.matrix.fromArray(pose.pointerMatrix);
+          const controllerIndex = _getControllerIndex(inputSource);
+          const controllerMesh = controllerMeshes[controllerIndex];
+          controllerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
           controllerMesh.updateMatrixWorld(true);
+          controllerMesh.visible = true;
         }
       }
 
@@ -479,7 +502,7 @@
     })();
 
     (() => {
-      const framesData = [];
+      let cameraTracker = null;
 
       const server = window.browser.http.createServer((req, res) => {
         console.log('got request', req.url);
@@ -518,9 +541,7 @@
               res.statusCode = 500;
               res.end();
             });
-        } else if (match = req.url.match(/^\/frame\/([0-9]+)$/)) {
-          const frameId = parseInt(match[1], 10);
-          const frameData = framesData[frameId];
+        /* } else if (req.url === '/frame') {
           if (frameData) {
             console.log('send frame data', typeof frameData, frameData.constructor && frameData.constructor.name, frameData && frameData.length);
             res.setHeader('Content-Type', 'application/octet-stream');
@@ -528,7 +549,7 @@
           } else {
             res.statusCode = 404;
             res.end();
-          }
+          } */
         } else {
           res.statusCode = 404;
           res.end();
@@ -541,30 +562,34 @@
       wss.on('connection', (c, request) => {
         console.log('open connection');
 
-        const _onCameraFrame = a => {
-          console.log('camera frame', a.length, c.readyState === window.browser.ws.OPEN);
+        if (!cameraTracker) {
+          const _onCameraFrame = e => {
+            // console.log('camera frame', a.length, c.readyState === window.browser.ws.OPEN);
+            const frameData = Buffer.from(e.data);
+
+            for (let i = 0; i < cameraTracker.callbacks.length; i++) {
+              cameraTracker.callbacks[i](frameData);
+            }
+          };
+          window.browser.magicleap.RequestCamera(_onCameraFrame);
+
+          cameraTracker = {
+            callbacks: [],
+          };
+        }
+        
+        const _cameraTrackerCallback = frameData => {
           if (c.readyState === window.browser.ws.OPEN) {
-            const updates = a.map((e, i) => {
-              const {width, height, bpp, stride, data} = e;
-              framesData[i] = Buffer.from(data);
-              return {
-                index: i,
-                width,
-                height,
-                bpp,
-                stride,
-              };
-            });
-            c.send(JSON.stringify(updates));
+            c.send(frameData);
           }
         };
-        window.browser.magicleap.RequestCamera(_onCameraFrame);
+        cameraTracker.callbacks.push(_cameraTrackerCallback);
 
         c.on('close', () => {
           console.log('close connection 1');
-          framesData.length = 0;
+          cameraTracker.callbacks.splice(cameraTracker.callbacks.indexOf(_cameraTrackerCallback), 1);
           console.log('close connection 2');
-          window.browser.magicleap.CancelCamera(_onCameraFrame);
+          // window.browser.magicleap.CancelCamera(_onCameraFrame);
           console.log('close connection 3');
         });
       });

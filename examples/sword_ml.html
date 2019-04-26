@@ -1,0 +1,290 @@
+<html>
+  <head>
+   <meta charset="utf-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <meta name="theme-color" content="#008000"/>
+   <title>sword_ml</title>
+   <link rel="manifest" href="sword_ml_manifest.json">
+   <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sword_ml_sw.js')
+        .then(function() {
+              console.log('Service Worker Registered');
+        });
+    }
+   </script>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+  <h1>sword_ml</h1>
+  <script src="three.js"></script>
+  <script src="sprite3d.js"></script>
+  <script>
+    let container, scene, camera, renderer, display;
+    let swordMesh, particles;
+
+    const localVector = new THREE.Vector3();
+    const localVector2 = new THREE.Vector3();
+    const localQuaternion = new THREE.Quaternion();
+    const localMatrix = new THREE.Matrix4();
+    const localVectorFloat32Array = new Float32Array(3);
+    const localVectorFloat32Array2 = new Float32Array(3);
+
+    const _makeButtons = () => ({
+      trigger: false,
+      bumper: false,
+    });
+    const lastButtons = [
+      _makeButtons(),
+      _makeButtons(),
+    ];
+    let grabbedIndex = -1;
+    let hitTesting = false;
+
+    const _requestSpriteMesh = url => new Promise((accept, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = url;
+      img.onload = () => {
+        const spriteMesh = sprite3d.makeSpriteMesh(img);
+        accept(spriteMesh);
+      };
+      img.onerror = err => {
+        reject(err);
+      };
+    });
+
+    const particleGeometry = new THREE.BoxBufferGeometry(0.005, 0.005, 0.005);
+    const particleMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff5722,
+      flatShading: true,
+    });
+    const _makeParticle = () => {
+      const mesh = new THREE.Mesh(particleGeometry, particleMaterial);
+      mesh.matrixAutoUpdate = false;
+      mesh.frustumCulled = false;
+      mesh.endTime = Date.now() + 1000 + Math.floor(Math.random() * 2000);
+      return mesh;
+    };
+    const _makeParticles = (position, rotation) => {
+      const numParticles = 1 + Math.floor(Math.random() * 3);
+      for (let j = 0; j < numParticles; j++) {
+        const particle = _makeParticle();
+        particle.position.copy(position);
+        particle.quaternion.copy(rotation);
+        particle.updateMatrix();
+        particle.updateMatrixWorld();
+        particle.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 0.01,
+          (Math.random() - 0.5) * 0.02,
+          (Math.random() - 0.5) * 0.01
+        );
+        scene.add(particle);
+        particles.push(particle);
+      }
+    };
+
+    function init() {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+
+      scene = new THREE.Scene();
+      scene.matrixAutoUpdate = false;
+      // scene.background = new THREE.Color(0x3B3961);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      // camera.position.set(0, 1, 0);
+      // camera.lookAt(new THREE.Vector3());
+      scene.add(camera);
+
+      // const ambientLight = new THREE.AmbientLight(0x333333);
+      const ambientLight = new THREE.AmbientLight(0x808080);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0x808080, 1);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
+      swordMesh = new THREE.Object3D();
+      _requestSpriteMesh('sword.png')
+        .then(newSwordMesh => {
+          newSwordMesh.position.set(0.05, 0.11, -0.15);
+          newSwordMesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(1, 1, 0).normalize(),
+            new THREE.Vector3(0, 1, 0),
+          ).premultiply(
+            new THREE.Quaternion().setFromUnitVectors(
+              new THREE.Vector3(0, 1, 0),
+              new THREE.Vector3(0, 1, -1).normalize(),
+            )
+          );
+          newSwordMesh.frustumCulled = false;
+
+          swordMesh.add(newSwordMesh);
+          scene.add(swordMesh);
+        })
+        .catch(err => {
+          console.warn(err.stack);
+        });
+
+      particles = [];
+
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      container.appendChild(renderer.domElement);
+
+      renderer.setAnimationLoop(animate);
+    }
+
+    let lastUpdateTime = Date.now();
+    function animate(time, frame) {
+      const now = Date.now();
+      const timeDiff = now - lastUpdateTime;
+
+      if (renderer.vr.enabled) {
+        const gamepads = navigator.getGamepads();
+        const inputSources = display.session.getInputSources();
+
+        const _updateGamepads = () => {
+          for (let i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            const bumper = gamepad.buttons[2].pressed;
+            const lastBumper = lastButtons[i].bumper;
+
+            if (bumper && !lastBumper) {
+              const inputSource = inputSources[i];
+              const pose = frame.getInputPose(inputSource);
+              localMatrix
+                .fromArray(pose.targetRay.transformMatrix)
+                .decompose(localVector, localQuaternion, localVector2);
+              if (localVector.distanceTo(swordMesh.position) < 0.3) {
+                grabbedIndex = i;
+              }
+            } else if (lastBumper && !bumper) {
+              if (grabbedIndex !== -1) {
+                grabbedIndex = -1;
+              }
+            }
+
+            lastButtons[i].bumper = bumper;
+          }
+        };
+        const _updateGrab = () => {
+          if (grabbedIndex !== -1) {
+            const inputSource = inputSources[grabbedIndex];
+            const pose = frame.getInputPose(inputSource);
+            swordMesh.matrix.fromArray(pose.targetRay.transformMatrix);
+            swordMesh.matrix.decompose(swordMesh.position, swordMesh.quaternion, swordMesh.scale);
+            swordMesh.updateMatrixWorld(true);
+          }
+        };
+        const _updateHitTest = () => {
+          if (!hitTesting) {
+            const startPosition = swordMesh.position.clone();
+
+            display.session.requestHitTest(
+              swordMesh.position
+                .toArray(localVectorFloat32Array),
+              localVector.set(0, 1, -1)
+                .normalize()
+                .applyQuaternion(swordMesh.quaternion)
+                .toArray(localVectorFloat32Array2)
+            )
+              .then(result => {
+                if (result.length) {
+                  const [{hitMatrix}] = result;
+                  localMatrix
+                    .fromArray(hitMatrix)
+                    .decompose(localVector, localQuaternion, localVector2);
+
+                  if (localVector.distanceTo(startPosition) < 0.5) {
+                    console.log('got hit', localVector.toArray().join(','), localQuaternion.toArray().join(','));
+                    _makeParticles(localVector, localQuaternion);
+                  }
+                }
+
+                hitTesting = false;
+              });
+
+            hitTesting = true;
+          }
+        };
+        const _updateParticles = () => {
+          if (particles.length > 0) {
+            const localParticles = particles.slice();
+
+            for (let i = 0; i < localParticles.length; i++) {
+              const particle = localParticles[i];
+              if (now < particle.endTime) {
+                particle.velocity.add(
+                  localVector
+                    .set(0, -9.8, 0)
+                    .multiplyScalar(timeDiff / 1000 * 0.002)
+                );
+                particle.position.add(particle.velocity);
+                particle.updateMatrix();
+                particle.updateMatrixWorld();
+              } else {
+                scene.remove(particle);
+                particles.splice(particles.indexOf(particle), 1);
+              }
+            }
+          }
+        };
+
+        _updateGamepads();
+        _updateGrab();
+        _updateHitTest();
+        _updateParticles();
+
+        lastUpdateTime = now;
+      }
+
+      renderer.render(scene, renderer.vr.enabled ? renderer.vr.getCamera(camera) : camera);
+    }
+
+    init();
+
+    (async () => {
+      console.log('request device');
+      display = await navigator.xr.requestDevice();
+      console.log('request session');
+      const session = await display.requestSession({
+        exclusive: true,
+      });
+      display.session = session;
+
+      // console.log('request first frame');
+      session.requestAnimationFrame((timestamp, frame) => {
+        renderer.vr.setSession(session, {
+          frameOfReferenceType: 'stage',
+        });
+
+        const viewport = session.baseLayer.getViewport(frame.views[0]);
+        const width = viewport.width;
+        const height = viewport.height;
+
+        renderer.setSize(width * 2, height);
+
+        renderer.setAnimationLoop(null);
+
+        renderer.vr.enabled = true;
+        renderer.vr.setDevice(display);
+        renderer.vr.setAnimationLoop(animate);
+
+        console.log('running!');
+      });
+    })();
+  </script>
+  </body>
+</html>

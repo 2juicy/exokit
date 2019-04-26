@@ -1,27 +1,57 @@
-# Exokit
+<h1 align="center">Exokit</h1>
+<p align="center"><a href="https://exokit.org" target="_blank"><img width="300" height="300" alt="Exokit" src="assets/icon.png"/></a></p>
+<p align="center"><b>:dark_sunglasses: Native VR and AR engine for JavaScript 🦖</b></p>
 
-## Native VR and AR engine for JavaScript 🦖
+<p align="center">
+  <a href="https://github.com/exokitxr/exokit/releases"><img src="https://img.shields.io/github/downloads/exokitxr/exokit/total.svg"></a>
+  <a href="https://www.npmjs.com/package/exokit"><img src="https://img.shields.io/npm/v/exokit.svg"></a>
+  <a href="https://travis-ci.org/modulesio/exokit-windows"><img src="https://travis-ci.org/modulesio/exokit-windows.svg?branch=master"></a>
+  <a href="https://ci.appveyor.com/project/modulesio/exokit-windows"><img src="https://ci.appveyor.com/api/projects/status/32r7s2skrgm9ubva?svg=true"></a>  
+  <a href="https://twitter.com/exokitxr"><img src="https://img.shields.io/twitter/follow/exokitxr.svg?style=social"></a>
+</p>
 
-<img src="https://github.com/webmixedreality/exokit/blob/master/icon.png" width=100/>
+<div align="center">
+  <a href="https://exokit.org">Site</a>
+  &mdash;
+  <a href="https://exokit.org/docs/">Docs</a>
+  &mdash;
+  <a href="https://discordapp.com/invite/Apk6cZN">Discord</a>
+  &mdash;
+  <a href="https://twitter.com/exokitxr">Twitter</a>
+  &mdash;
+  <a href="http://eepurl.com/dFiLMz">Email List</a>
+</div>
 
-[![Slack](https://exoslack.now.sh/badge.svg)](https://join.slack.com/t/exokit/shared_invite/enQtNDI3NjcxNzYwMDIxLWU2NmFmOTEzMzk4NWNiYjRhMjVkYzcyNjg5YjUyMzZkYWM1ZGI4M2IwYWZiMjNlMTJjMDlkM2U3Y2JiNTc2M2Q)
-[![Github releases](https://img.shields.io/github/downloads/webmixedreality/exokit/total.svg)](https://github.com/webmixedreality/exokit/releases )
-[![npm package](https://img.shields.io/npm/v/exokit.svg)](https://www.npmjs.com/package/exokit)
-[![Travis CI build status](https://travis-ci.org/modulesio/exokit-windows.svg?branch=master)](https://travis-ci.org/modulesio/exokit-windows)
-[![Appveyor build status](https://ci.appveyor.com/api/projects/status/32r7s2skrgm9ubva?svg=true)](https://ci.appveyor.com/project/modulesio/exokit-windows)
-[![Twitter Follow](https://img.shields.io/twitter/follow/webmixedreality.svg?style=social)](https://twitter.com/webmixedreality)
+## Examples
 
-### Subscribe to our Email list to be notified when we launch! http://eepurl.com/dFiLMz
+<a href="https://youtu.be/cd_DEwCDF6U"><img alt="Hands Reality Tab" target="_blank" src="https://user-images.githubusercontent.com/29695350/55507781-0e463300-561e-11e9-9b1a-f43b8259d041.gif" height="190" width="32%"></a>
+<a href="https://youtu.be/b-UKSg0QCRE"><img alt="Live Reload Magic Leap" target="_blank" src="https://user-images.githubusercontent.com/29695350/55507118-a216ff80-561c-11e9-829e-74d8244571c3.gif" height="190" width="32%"></a>
+<a href="https://youtu.be/O1xA1r5SZUM"><img alt="Tutorial Reality Tab" target="_blank" src="https://user-images.githubusercontent.com/29695350/55507125-a3e0c300-561c-11e9-835f-3a26a9e879b5.gif" height="190" width="32%"></a>
 
-This project enables developers to build XR experiences using the same code that runs on the web. Exokit engine is written on top of Node and emulates a web browser, providing native hooks for WebGL, WebXR, WebAudio, and other APIs used in immersive experiences.
+<a href="https://www.youtube.com/watch?v=m_QntqZmd_Q"><img alt="Reality Projection with HTC Vive and Magic Leap" target="_blank" src="https://user-images.githubusercontent.com/29695350/55507271-e60a0480-561c-11e9-87ad-7dc736ba0760.gif" height="190" width="32%"></a>
+<a href="https://youtu.be/i0MXRCNkdB4"><img alt="Emukit" target="_blank" src="https://user-images.githubusercontent.com/29695350/55507623-a8f24200-561d-11e9-97a3-194b6b4a1d8b.gif" height="190" width="32%"></a>
+<a href="https://exokit.org/"><img alt="Various Exokit Apps" target="_blank" src="https://user-images.githubusercontent.com/29695350/55506701-ba3a4f00-561b-11e9-9e19-ba808bed7c5a.gif" height="190" width="32%"></a>
 
-Exokit targets the following platforms:
-* Desktop VR (Steam compatible)
-* Mobile AR (ARKit / ARCore)
+*Find more examples [here](https://github.com/exokitxr/exokit/tree/master/examples) and on [YouTube](https://www.youtube.com/channel/UC87Q7_5ooY8FSLwOec52ZPQ).*
+
+
+## Overview
+
+This project **enables developers to build XR experiences using the same code that runs on the web**. Exokit engine is written on top of Node and emulates a web browser, providing native hooks for WebGL, WebXR, WebAudio, and other APIs used in immersive experiences.
+
+:eyeglasses: **Exokit currently targets the following platforms**:
+* OpenVR Desktop VR (Steam compatible)
+* Oculus Desktop (Oculus Rift/Rift S)
+* Oculus Mobile (Oculus Quest/Go, GearVR)
 * Magic Leap
-* Mobile VR (Daydream / Gear VR)
+* iOS ARKit *
+* Android ARCore *
+* Google VR (Daydream / Cardboard / Mirage Solo) *
+* any XR device, start a [pull request](https://github.com/exokitxr/exokit/compare) with a native binding if it isn't listed here! *
 
-Since Exokit supports anything that runs on the web, it powers experiences built with:
+\* not supported yet
+
+:electric_plug: **Since Exokit supports anything that runs on the web, it powers experiences built with**:
 * Three.js
 * Unity
 * Pixi.js
@@ -30,47 +60,21 @@ Since Exokit supports anything that runs on the web, it powers experiences built
 * Custom WebGL frameworks
 * WebAssembly, TypeScript, and any language that transpiles to JavaScript
 
-# Quickstart
+:thumbsup: **Why Exokit?**
 
-#### [Download for current OS](https://get.webmr.io)
+- You want your WebGL/WebXR to run fast.
+- You want the hot new web APIs.
+- You want to add your own integrations -- including native -- into a browser environment.
+- You want a lightweight browser as a hackable node module.
+- You want to combine the web with a 3D engine like Unity.
 
-#### Build your own (desktop)
+:thumbsdown: **Why not Exokit?**
 
-```
-git clone https://github.com/webmixedreality/exokit.git
-cd exokit
-npm install
-node . # or node . -h for home
-```
+- You're looking for a traditional "web browser".
+- You don't care about 3D or mixed reality.
+- You're looking for strict and/or legacy standards support.
 
-#### Run a WebXR site (desktop)
-
-```
-exokit https://emukit.webmr.io/ # start Emukit in Exokit
-```
-
-#### [Download for Magic Leap](https://get.webmr.io/magicleap)
-
-#### Run (Magic Leap device)
-
-```
-mldb connect 192.168.0.10:1131 # mldb needs to be connected; see MLDB documentation
-mldb install -u exokit.mpk # downloaded or built package
-mldb launch com.webmr.exokit -v "ARGS=node . examples/hello_ml.html" # or URL to load
-mldb log exokit:*
-```
-
-#### Debug (Magic Leap device)
-
-```
-ls ./cert/app.{cert,privkey} # place Magic Leap certificate here
-./scripts/build-ml.sh # run from Ubuntu bash on Windows
-"$MLSDK/tools/debug/debug.py" --deploy-mpk ./build/magicleap/exokit.mpk ./build/magicleap/program-device/release_lumin_clang-3.8_aarch64/program-device --env "ARGS=node . examples/hello_ml.html" # or URL to load
-```
-
-## Manifesto
-
-<img src="assets/screenshots.gif" alt="Screenshots"/>
+:book: **Manifesto**
 
 - The future is immersive. The web is the best application platform. Javascript is the best ecosystem.
 - Content should be hardware agnostic. Tomorrow will have different hardware. VR and AR should be compatible.
@@ -79,6 +83,32 @@ ls ./cert/app.{cert,privkey} # place Magic Leap certificate here
 - Legacy browser design choices don't make sense in XR.
 - Exokit empowers and connect apps, even (especially) if they aren't designed to cooperate.
 - Apps should run in "reality tabs", layers of reality that blend together.
+
+
+
+## Quickstart
+
+### Desktop
+<h4><a href="https://get.exokit.org">Download for current OS</a></h4>
+
+#### Run a WebXR site (desktop)
+
+```sh
+exokit https://aframe.io/a-painter/ # start A-Painter in Exokit
+```
+
+### Magic Leap
+
+<h4><a href="https://get.exokit.org/magicleap">Download for Magic Leap</a></h4>
+
+#### Run (Magic Leap device)
+
+```sh
+mldb connect 192.168.0.10:1131 # mldb needs to be connected; see MLDB documentation
+mldb install -u exokit.mpk # downloaded or built package
+mldb launch com.webmr.exokit -v "ARGS=node --experimental-worker . file:///package/examples/hello_ml.html" # or URL to load
+mldb log exokit:*
+```
 
 ## Architecture
 
@@ -97,7 +127,9 @@ Exokit runs on Windows, macOS, Linux (x64), Linux (ARM64), and Magic Leap (ARM64
 - `<script>`
 - DOM
 - WebGL
-- WebXL
+- WebXR
+- WebVR
+- WebRTC
 - Canvas2D
 - WebSocket
 - Web Workers
@@ -106,59 +138,58 @@ Exokit runs on Windows, macOS, Linux (x64), Linux (ARM64), and Magic Leap (ARM64
 - Keyboard/Mouse events
 - Gamepad API
 - `<iframe>`
-- **No** HTML layout
-- **No** HTML rendering
-- **No** CSS
-- **No** Legacy APIs
+- ~~HTML layout~~
+- ~~HTML rendering~~
+- ~~CSS~~
+- ~~Legacy APIs~~
 
 ## Hardware bindings
 
 - OpenGL
 - OpenVR (Steam VR)
+- Oculus 
+- Oculus Mobile 
 - Magic Leap
 - Leap Motion
 
-## Why Exokit?
+## Local Development
+See full building instructions in [BUILDING.md](https://github.com/exokitxr/exokit/blob/master/BUILDING.md).
 
-- You want your WebGL/WebXR to run fast.
-- You want the hot new web APIs.
-- You want to add your own integrations -- including native -- into a browser environment.
-- You want a lightweight browser as a hackable node module.
-- You want to combine the web with a 3D engine like Unity.
-
-## Why not Exokit?
-
-- You're looking for a "web browser".
-- You don't care about 3D or mixed reality.
-- You're looking for strict and/or legacy standards support.
+```sh
+git clone https://github.com/exokitxr/exokit.git
+cd exokit
+npm install
+node --experimental-worker . <url> # or node --experimental-worker . -h for home
+```
 
 ## Debugging
 
 Uses [ndb](https://github.com/GoogleChromeLabs/ndb).
 
-```js
+```sh
 npm run debug
 ```
 
 Then in the console, input:
 
-```
+```js
 let window = await require('./src/').load(yourUrl);
 ```
 
 Now you have a handle on the window object as you test your application, and
 you can set `debugger` breakpoints, inspect memory, profile CPU, etc.
 
-## Community
 
-- [Slack](https://communityinviter.com/apps/exokit/exokit) for development
-- [Discord](https://discord.gg/Apk6cZN) for hanging out
-- [Twitter](https://twitter.com/webmixedreality) for silliness
+## Stay in Touch
 
-## Contributors
+- [Join our Discord](https://discord.gg/Apk6cZN) for hanging out.
+- [Follow @exokitxr on Twitter](https://twitter.com/exokitxr) for updates.
 
-- [Avaer K](//github.com/modulesio)
-- [Nick L](//github.com/Fierent)
-- [Chris Eddy](//github.com/ChrisEddy)
-- [Chris La Torres](https://github.com/chrislatorres)
-- [Noah A S](//github.com/NoahSchiffman)
+
+## Contributing
+
+Get involved! Check out the [Contributing Guide](CONTRIBUTING.md) for how to get started.
+
+## License
+
+This program is free software and is distributed under an [MIT License](LICENSE.md).

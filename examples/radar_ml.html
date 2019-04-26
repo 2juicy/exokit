@@ -1,0 +1,298 @@
+<html>
+  <head>
+   <meta charset="utf-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <meta name="theme-color" content="#008000"/>
+   <title>radar_ml</title>
+   <link rel="manifest" href="radar_ml_manifest.json">
+   <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/radar_ml_sw.js')
+        .then(function() {
+              console.log('Service Worker Registered');
+        });
+    }
+   </script>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+  <h1>radar_ml</h1>
+  <script src="three.js"></script>
+  <script src="sprite3d.js"></script>
+  <script>
+    let container, scene, camera, radarScene, radarCamera, renderer, display, controllerMeshes;
+    let swordMesh = null;
+
+    const FLOOR_SIZE = 20;
+    let scaleFactor = 1;
+
+    const controllerGeometry = new THREE.BoxBufferGeometry(0.1, 0.1, 0.01)
+      .applyMatrix(new THREE.Matrix4().makeTranslation(0, 0.1/2, 0));
+    const controllerMaterial = new THREE.MeshPhongMaterial({
+      color: 0xCCCCCC,
+    });
+    const _makeControllerMesh = (x = 0, y = 0, z = 0, qx = 0, qy = 0, qz = 0, qw = 1) => {
+      const object = new THREE.Object3D();
+      object.position.set(x, y, z);
+      object.quaternion.set(qx, qy, qz, qw);
+      object.rotation.order = 'YXZ';
+
+      const innerMesh = (() => {
+        const mesh = new THREE.Mesh(controllerGeometry, controllerMaterial);
+        // mesh.matrix.compose(mesh.position, mesh.quaternion, mesh.scale);
+        // mesh.updateMatrix();
+        // mesh.updateMatrixWorld();
+        // mesh.matrixAutoUpdate = false;
+        mesh.frustumCulled = false;
+        return mesh;
+      })();
+      object.add(innerMesh);
+      object.innerMesh = innerMesh;
+
+      const planeMesh = (() => {
+        const renderTarget = new THREE.WebGLRenderTarget(512, 512, {
+          format: THREE.RGBFormat,
+        });
+        renderTarget.transparent = false;
+
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneBufferGeometry(0.1, 0.1)
+            .applyMatrix(new THREE.Matrix4().makeTranslation(0, 0.1/2, 0.01)),
+          new THREE.MeshBasicMaterial({
+            // color: 0x0000FF,
+            map: renderTarget.texture,
+          })
+        );
+        mesh.frustumCulled = false;
+        mesh.renderTarget = renderTarget;
+        return mesh;
+      })();
+      object.add(planeMesh);
+      object.planeMesh = planeMesh;
+
+      return object;
+    };
+    const _getControllerIndex = inputSource => inputSource.handedness === 'left' ? 0 : 1;
+
+    const _requestSpriteMesh = url => new Promise((accept, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = url;
+      img.onload = () => {
+        const spriteMesh = sprite3d.makeSpriteMesh(img);
+        accept(spriteMesh);
+      };
+      img.onerror = err => {
+        reject(err);
+      };
+    });
+
+    function init() {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+
+      scene = new THREE.Scene();
+      scene.matrixAutoUpdate = false;
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      scene.add(camera);
+
+      {
+        const ambientLight = new THREE.AmbientLight(0x808080);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0x808080, 1);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+      }
+
+      controllerMeshes = [
+        _makeControllerMesh(-0.1),
+        _makeControllerMesh(0.1),
+      ];
+      controllerMeshes.forEach(controllerMesh => {
+        scene.add(controllerMesh);
+      });
+
+      const woodMesh = new THREE.Object3D();
+      _requestSpriteMesh('wood.png')
+        .then(newWoodMesh => {
+          newWoodMesh.frustumCulled = false;
+          woodMesh.add(newWoodMesh);
+        })
+        .catch(err => {
+          console.warn(err.stack);
+        });
+      scene.add(woodMesh);
+
+      radarScene = new THREE.Scene();
+      radarScene.matrixAutoUpdate = false;
+
+      radarCamera = new THREE.PerspectiveCamera(80, 1, 0.1, 1000);
+      radarCamera.rotation.order = 'YXZ';
+      radarScene.add(radarCamera);
+
+      {
+        const ambientLight = new THREE.AmbientLight(0x808080);
+        radarScene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0x808080, 1);
+        directionalLight.position.set(1, 1, 1);
+        radarScene.add(directionalLight);
+      }
+
+      const woodMesh2 = new THREE.Object3D();
+      _requestSpriteMesh('wood.png')
+        .then(newWoodMesh => {
+          newWoodMesh.frustumCulled = false;
+          woodMesh2.add(newWoodMesh);
+        })
+        .catch(err => {
+          console.warn(err.stack);
+        });
+      radarScene.add(woodMesh2);
+
+      const floorMesh = (() => {
+        const geometry = new THREE.PlaneBufferGeometry(FLOOR_SIZE, FLOOR_SIZE)
+          .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(
+            new THREE.Quaternion().setFromUnitVectors(
+              new THREE.Vector3(0, 0, 1),
+              new THREE.Vector3(0, 1, 0)
+            )
+          ));
+        const uvs = geometry.attributes.uv.array;
+        const numUvs = uvs.length / 2;
+        for (let i = 0; i < numUvs; i++) {
+          uvs[i * 2] *= FLOOR_SIZE / 10 * 2;
+          uvs[i * 2 + 1] *= FLOOR_SIZE / 10;
+        }
+
+        const texture = new THREE.Texture(
+          null,
+          THREE.UVMapping,
+          THREE.RepeatWrapping,
+          THREE.RepeatWrapping,
+          THREE.NearestFilter,
+          THREE.NearestFilter,
+          THREE.RGBAFormat,
+          THREE.UnsignedByteType,
+          1
+        );
+
+        const graphImg = new Image();
+        graphImg.crossOrigin = 'Anonymous';
+        graphImg.src = 'graphy.png';
+        graphImg.onload = () => {
+          texture.image = graphImg;
+          texture.needsUpdate = true;
+        };
+        graphImg.onerror = err => {
+          console.warn(err.stack);
+        };
+
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        return mesh;
+      })();
+      radarScene.add(floorMesh);
+
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      container.appendChild(renderer.domElement);
+
+      renderer.setAnimationLoop(animate);
+    }
+
+    function animate(time, frame) {
+      if (renderer.vr.enabled) {
+        for (let i = 0; i < controllerMeshes.length; i++) {
+          controllerMeshes[i].visible = false;
+        }
+
+        const inputSources = display.session.getInputSources();
+        for (let i = 0; i < inputSources.length; i++) {
+          const inputSource = inputSources[i];
+          const pose = frame.getInputPose(inputSource);
+
+          const controllerIndex = _getControllerIndex(inputSource);
+          const controllerMesh = controllerMeshes[controllerIndex];
+          controllerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
+          controllerMesh.matrix.decompose(controllerMesh.position, controllerMesh.quaternion, controllerMesh.scale);
+          controllerMesh.updateMatrixWorld(true);
+          controllerMesh.visible = true;
+
+          const oldVrEnabled = renderer.vr.enabled;
+          renderer.vr.enabled = false;
+          radarCamera.position.copy(controllerMesh.position);
+          radarCamera.position.y = 3;
+
+          radarCamera.rotation.x = -Math.PI/2;
+          radarCamera.rotation.y = controllerMesh.rotation.y;
+          radarCamera.rotation.z = 0;
+
+          renderer.render(radarScene, radarCamera, controllerMesh.planeMesh.renderTarget);
+          renderer.setRenderTarget(null);
+          renderer.vr.enabled = oldVrEnabled;
+        }
+      }
+      /* if (renderer.vr.enabled) {
+        const inputSources = display.session.getInputSources();
+        const inputSource = inputSources[0];
+        const pose = frame.getInputPose(inputSource);
+
+        woodMesh.matrix.fromArray(pose.targetRay.transformMatrix);
+        woodMesh.matrix.decompose(woodMesh.position, woodMesh.quaternion, woodMesh.scale);
+        woodMesh.updateMatrixWorld(true);
+      } */
+
+      renderer.render(scene, renderer.vr.enabled ? renderer.vr.getCamera(camera) : camera);
+    }
+
+    init();
+
+    (async () => {
+      console.log('request device');
+      display = await navigator.xr.requestDevice();
+      console.log('request session');
+      const session = await display.requestSession({
+        exclusive: true,
+      });
+      display.session = session;
+
+      // console.log('request first frame');
+      session.requestAnimationFrame((timestamp, frame) => {
+        renderer.vr.setSession(session, {
+          frameOfReferenceType: 'stage',
+        });
+
+        const viewport = session.baseLayer.getViewport(frame.views[0]);
+        const width = viewport.width;
+        const height = viewport.height;
+
+        renderer.setSize(width * 2, height);
+
+        renderer.setAnimationLoop(null);
+
+        renderer.vr.enabled = true;
+        renderer.vr.setDevice(display);
+        renderer.vr.setAnimationLoop(animate);
+
+        console.log('running!');
+      });
+    })();
+  </script>
+  </body>
+</html>

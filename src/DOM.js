@@ -1,20 +1,26 @@
+const path = require('path');
+const fs = require('fs');
+const url = require('url');
+const util = require('util');
 const ClassList = require('window-classlist');
 const css = require('css');
 const he = require('he');
 const parse5 = require('parse5');
 const parseIntStrict = require('parse-int');
 const selector = require('window-selector');
-const url = require('url');
-const util = require('util');
+const fetch = require('window-fetch');
+const {Blob} = fetch;
+const htmlUnescape = require('unescape');
 
-const bindings = require('./bindings');
+const bindings = require('./native-bindings');
 const {defaultCanvasSize} = require('./constants');
-const {Event, EventTarget, MouseEvent, ErrorEvent} = require('./Event');
+const {Event, EventTarget, MessageEvent, MouseEvent, ErrorEvent} = require('./Event');
 const GlobalContext = require('./GlobalContext');
 const symbols = require('./symbols');
-const urls = require('./urls').urls;
+const {urls} = require('./urls');
 const utils = require('./utils');
-const {_elementGetter, _elementSetter} = require('./utils');
+const {_elementGetter, _elementSetter} = utils;
+const {XRRigidTransform} = require('./XR');
 
 he.encode.options.useNamedReferences = true;
 
@@ -54,6 +60,47 @@ class DOMRect {
     this.bottom = h >= 0 ? y + h : y;
   }
 }
+module.exports.DOMRect = DOMRect;
+
+class DOMPoint {
+  constructor(x = 0, y = 0, z = 0, w = 1) {
+    if (typeof x === 'object') {
+      this.values = x;
+    } else {
+      this.values = new Float32Array(4);
+      this.x = x;
+      this.y = y;
+      this.z = z;
+      this.w = w;
+    }
+  }
+  get x() {
+    return this.values[0];
+  }
+  set x(x) {
+    this.values[0] = x;
+  }
+  get y() {
+    return this.values[1];
+  }
+  set y(y) {
+    this.values[1] = y;
+  }
+  get z() {
+    return this.values[2];
+  }
+  set z(z) {
+    this.values[2] = z;
+  }
+  get w() {
+    return this.values[3];
+  }
+  set w(w) {
+    this.values[3] = w;
+  }
+}
+module.exports.DOMPoint = DOMPoint;
+GlobalContext.DOMPoint = DOMPoint;
 
 class NodeList extends Array {
   constructor(nodes) {
@@ -83,12 +130,14 @@ class HTMLCollection extends Array {
 module.exports.HTMLCollection = HTMLCollection;
 
 class Node extends EventTarget {
-  constructor() {
+  constructor(window) {
     super();
 
     this.parentNode = null;
     this.childNodes = new NodeList();
-    this.ownerDocument = null;
+    this.ownerDocument = window.document;
+
+    this[symbols.windowSymbol] = window;
   }
 
   get parentElement() {
@@ -159,6 +208,11 @@ class Node extends EventTarget {
     }
   }
   set previousElementSibling(previousElementSibling) {}
+  
+  get nodeValue() {
+    return null;
+  }
+  set nodeValue(nodeValue) {}
 
   contains(el) {
     for (;;) {
@@ -171,6 +225,16 @@ class Node extends EventTarget {
       }
     }
   }
+
+  get isConnected() {
+    for (let el = this; el; el = el.parentNode) {
+      if (el.parentNode === el.ownerDocument) {
+        return true;
+      }
+    }
+    return false;
+  }
+  set isConnected(isConnected) {}
 
   cloneNode(deep = false) {
     return _cloneNode(deep, this);
@@ -205,9 +269,8 @@ class Node extends EventTarget {
  * @param {parentNode} parentNode - Used for recursive cloning to attach parent.
  */
 function _cloneNode(deep, sourceNode, parentNode) {
-  const clone = new sourceNode.constructor();
+  const clone = new sourceNode.constructor(sourceNode[symbols.windowSymbol]);
   clone.attrs = sourceNode.attrs;
-  clone.ownerDocument = sourceNode.ownerDocument;
   clone.tagName = sourceNode.tagName;
   clone.value = sourceNode.value;
 
@@ -255,15 +318,21 @@ const _setAttributeRaw = (el, prop, value) => {
   }
 };
 
+const _makeAttr = attr => attr && ({ // XXX should be class Attr
+  name: attr.name,
+  value: attr.value,
+  nodeName: attr.name,
+  nodeValue: attr.value,
+});
 const _makeAttributesProxy = el => new Proxy(el.attrs, {
   get(target, prop) {
     const propN = parseIntStrict(prop);
     if (propN !== undefined) {
-      return target[propN];
+      return _makeAttr(target[propN]);
     } else if (prop === 'length') {
       return target.length;
     } else {
-      return target.find(attr => attr.name === prop);
+      return _makeAttr(target.find(attr => attr.name === prop));
     }
   },
   set(target, prop, value) {
@@ -346,7 +415,10 @@ const _makeStyleProxy = el => {
         const rule = rules[j];
         const {declarations} = rule;
         for (let k = 0; k < declarations.length; k++) {
-          const {property, value} = declarations[k];
+          let {property, value} = declarations[k];
+          if (/^\.[0-9]+[a-z]*$/i.test(value)) {
+            value = '0' + value;
+          }
           style[property] = value;
         }
       }
@@ -510,8 +582,8 @@ const _defineId = (window, id, el) => {
 };
 
 class Element extends Node {
-  constructor(tagName = 'DIV', attrs = [], value = '', location = null) {
-    super();
+  constructor(window, tagName = 'DIV', attrs = [], value = '', location = null) {
+    super(window);
 
     this.tagName = tagName;
     this.attrs = attrs;
@@ -535,10 +607,10 @@ class Element extends Node {
     });
     this.on('children', (addedNodes, removedNodes, previousSibling, nextSiblings) => {
       for (let i = 0; i < addedNodes.length; i++) {
-        addedNodes[i].emit('attached');
+        addedNodes[i]._emit('attached');
       }
       for (let i = 0; i < removedNodes.length; i++) {
-        removedNodes[i].emit('removed');
+        removedNodes[i]._emit('removed');
       }
     });
   }
@@ -642,11 +714,23 @@ class Element extends Node {
       throw new Error('The node to be removed is not a child of this node.');
     }
   }
+  
+  append() {
+    for (let i = 0; i < arguments.length; i++) {
+      const content = arguments[0];
+      if (typeof content === 'string') {
+        this.appendChild(this.ownerDocument.createTextNode(content));
+      } else {
+        this.appendChild(content);
+      }
+    }
+  }
   remove() {
     if (this.parentNode !== null) {
       this.parentNode.removeChild(this);
     }
   }
+  
   replaceChild(newChild, oldChild) {
     const index = this.childNodes.indexOf(oldChild);
     if (index !== -1) {
@@ -844,7 +928,13 @@ class Element extends Node {
   }
   querySelectorAll(s) {
     s = s + '';
-    return selector.find(this, s);
+    return selector.find({
+      traverse: fn => {
+        for (let i = 0; i < this.childNodes.length; i++) {
+          this.childNodes[i].traverse(fn);
+        }
+      },
+    }, s);
   }
   matches(s) {
     s = s + '';
@@ -992,7 +1082,7 @@ class Element extends Node {
     while (this.childNodes.length > 0) {
       this.removeChild(this.childNodes[this.childNodes.length - 1]);
     }
-    this.appendChild(new Text(textContent));
+    this.appendChild(this.ownerDocument.createTextNode(textContent));
   }
 
   get onclick() {
@@ -1151,8 +1241,20 @@ class Element extends Node {
 module.exports.Element = Element;
 
 class HTMLElement extends Element {
-  constructor(tagName = 'DIV', attrs = [], value = '', location = null) {
-    super(tagName, attrs, value, location);
+  constructor(window, tagName = 'DIV', attrs = [], value = '', location = null) {
+    if (HTMLElement.upgradeElement) {
+      return HTMLElement.upgradeElement;
+    }
+    
+    const extension = window.customElements.extensions[tagName];
+    if (extension) {
+      attrs.push({
+        name: 'is',
+        value: extension,
+      });
+    }
+    
+    super(window, tagName, attrs, value, location);
 
     this._style = null;
     this[symbols.computedStyleSymbol] = null;
@@ -1207,6 +1309,7 @@ class HTMLElement extends Element {
   }
   set style(style) {}
 }
+HTMLElement.upgradeElement = null;
 module.exports.HTMLElement = HTMLElement;
 
 function getAnchorUrl(anchorEl) {
@@ -1214,8 +1317,8 @@ function getAnchorUrl(anchorEl) {
 }
 
 class HTMLAnchorElement extends HTMLElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('A', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'A', attrs, value, location);
   }
 
   get href() {
@@ -1319,8 +1422,8 @@ class HTMLAnchorElement extends HTMLElement {
 module.exports.HTMLAnchorElement = HTMLAnchorElement;
 
 class HTMLLoadableElement extends HTMLElement {
-  constructor(tagName, attrs = [], value = '', location = null) {
-    super(tagName, attrs, value, location);
+  constructor(window, tagName, attrs = [], value = '', location = null) {
+    super(window, tagName, attrs, value, location);
   }
 
   get onload() {
@@ -1339,9 +1442,15 @@ class HTMLLoadableElement extends HTMLElement {
 }
 module.exports.HTMLLoadableElement = HTMLLoadableElement;
 
+class HTMLHeadElement extends HTMLElement {
+  constructor(window) {
+    super(window, 'HEAD');
+  }
+}
+
 class HTMLBodyElement extends HTMLElement {
-  constructor() {
-    super('BODY');
+  constructor(window) {
+    super(window, 'BODY');
   }
 
   get clientWidth() {
@@ -1356,8 +1465,8 @@ class HTMLBodyElement extends HTMLElement {
 module.exports.HTMLBodyElement = HTMLBodyElement;
 
 class HTMLStyleElement extends HTMLLoadableElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('STYLE', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'STYLE', attrs, value, location);
 
     this.stylesheet = null;
 
@@ -1366,7 +1475,7 @@ class HTMLStyleElement extends HTMLLoadableElement {
         .then(() => css.parse(innerHTML).stylesheet)
         .then(stylesheet => {
           this.stylesheet = stylesheet;
-          GlobalContext.styleEpoch++;
+          this.ownerDocument.defaultView[symbols.styleEpochSymbol]++;
           this.dispatchEvent(new Event('load', {target: this}));
         })
         .catch(err => {
@@ -1411,13 +1520,15 @@ class HTMLStyleElement extends HTMLLoadableElement {
 module.exports.HTMLStyleElement = HTMLStyleElement;
 
 class HTMLLinkElement extends HTMLLoadableElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('LINK', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'LINK', attrs, value, location);
 
     this.stylesheet = null;
 
     this.on('attribute', (name, value) => {
       if (name === 'href' && this.isRunnable()) {
+        this.readyState = 'loading';
+        
         const url = value;
         this.ownerDocument.defaultView.fetch(url)
           .then(res => {
@@ -1430,10 +1541,15 @@ class HTMLLinkElement extends HTMLLoadableElement {
           .then(s => css.parse(s).stylesheet)
           .then(stylesheet => {
             this.stylesheet = stylesheet;
-            GlobalContext.styleEpoch++;
+            this.ownerDocument.defaultView[symbols.styleEpochSymbol]++;
+            
+            this.readyState = 'complete';
+            
             this.dispatchEvent(new Event('load', {target: this}));
           })
           .catch(err => {
+            this.readyState = 'complete';
+            
             const e = new ErrorEvent('error', {target: this});
             e.message = err.message;
             e.stack = err.stack;
@@ -1473,7 +1589,7 @@ class HTMLLinkElement extends HTMLLoadableElement {
 
   [symbols.runSymbol]() {
     let running = false;
-    if (this.isRunnable()) {
+    if (this.isRunnable() && !this.readyState) {
       const hrefAttr = this.attributes.href;
       if (hrefAttr) {
         this._emit('attribute', 'href', hrefAttr.value);
@@ -1485,23 +1601,17 @@ class HTMLLinkElement extends HTMLLoadableElement {
 }
 module.exports.HTMLLinkElement = HTMLLinkElement;
 
+const _mapUrl = (u, window) => {
+  const v = window[symbols.optionsSymbol].replacements[u];
+  return v !== undefined ? v : u;
+};
 class HTMLScriptElement extends HTMLLoadableElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('SCRIPT', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'SCRIPT', attrs, value, location);
 
     this.readyState = null;
 
-    const _isAttached = () => {
-      for (let el = this; el; el = el.parentNode) {
-        if (el === el.ownerDocument) {
-          return true;
-        }
-      }
-      return false;
-    };
     const _loadRun = async => {
-      this.readyState = 'loading';
-
       if (!async) {
         this.ownerDocument[symbols.addRunSymbol](this.loadRunNow.bind(this));
       } else {
@@ -1509,19 +1619,19 @@ class HTMLScriptElement extends HTMLLoadableElement {
       }
     };
     this.on('attribute', (name, value) => {
-      if (name === 'src' && value && this.isRunnable() && _isAttached() && this.readyState === null) {
+      if (name === 'src' && value && this.isRunnable() && this.isConnected && !this.readyState) {
         const async = this.getAttribute('async');
         _loadRun(async !== null ? async !== 'false' : false);
       }
     });
     this.on('attached', () => {
-      if (this.src && this.isRunnable() && _isAttached() && this.readyState === null) {
+      if (this.src && this.isRunnable() && this.isConnected && !this.readyState) {
         const async = this.getAttribute('async');
         _loadRun(async !== null ? async !== 'false' : true);
       }
     });
     this.on('innerHTML', innerHTML => {
-      if (this.isRunnable() && _isAttached() && this.readyState === null) {
+      if (this.isRunnable() && this.isConnected && !this.readyState) {
         this.runNow();
       }
     });
@@ -1571,7 +1681,7 @@ class HTMLScriptElement extends HTMLLoadableElement {
   set innerHTML(innerHTML) {
     innerHTML = innerHTML + '';
 
-    this.childNodes = new NodeList([new Text(innerHTML)]);
+    this.childNodes = new NodeList([this.ownerDocument.createTextNode(innerHTML)]);
     this._emit('innerHTML', innerHTML);
   }
 
@@ -1581,57 +1691,60 @@ class HTMLScriptElement extends HTMLLoadableElement {
   }
 
   loadRunNow() {
-    const resource = this.ownerDocument.resources.addResource();
+    this.readyState = 'loading';
+    
+    const url = _mapUrl(this.src, this.ownerDocument.defaultView);
+    
+    return this.ownerDocument.resources.addResource((onprogress, cb) => {
+      this.ownerDocument.defaultView.fetch(url)
+        .then(res => {
+          if (res.status >= 200 && res.status < 300) {
+            return res.text();
+          } else {
+            return Promise.reject(new Error('script src got invalid status code: ' + res.status + ' : ' + url));
+          }
+        })
+        .then(s => {
+          utils._runJavascript(s, this.ownerDocument.defaultView, url);
 
-    const url = this.src;
-    return this.ownerDocument.defaultView.fetch(url)
-      .then(res => {
-        if (res.status >= 200 && res.status < 300) {
-          return res.text();
-        } else {
-          return Promise.reject(new Error('script src got invalid status code: ' + res.status + ' : ' + url));
-        }
-      })
-      .then(s => {
-        utils._runJavascript(s, this.ownerDocument.defaultView, url);
+          this.readyState = 'complete';
 
-        this.readyState = 'complete';
+          this.dispatchEvent(new Event('load', {target: this}));
+          
+          cb();
+        })
+        .catch(err => {
+          this.readyState = 'complete';
 
-        this.dispatchEvent(new Event('load', {target: this}));
-      })
-      .catch(err => {
-        this.readyState = 'complete';
-
-        const e = new ErrorEvent('error', {target: this});
-        e.message = err.message;
-        e.stack = err.stack;
-        this.dispatchEvent(e);
-      })
-      .finally(() => {
-        setImmediate(() => {
-          resource.setProgress(1);
+          const e = new ErrorEvent('error', {target: this});
+          e.message = err.message;
+          e.stack = err.stack;
+          this.dispatchEvent(e);
+          
+          cb(err);
         });
-      });
+    });
   }
 
   runNow() {
+    this.readyState = 'loading';
+    
     const innerHTML = this.childNodes[0].value;
     const window = this.ownerDocument.defaultView;
-    utils._runJavascript(innerHTML, window, window.location.href, this.location && this.location.line !== null ? this.location.line - 1 : 0, this.location && this.location.col !== null ? this.location.col - 1 : 0);
+    
+    return this.ownerDocument.resources.addResource((onprogress, cb) => {
+      utils._runJavascript(innerHTML, window, window.location.href, this.location && this.location.line !== null ? this.location.line - 1 : 0, this.location && this.location.col !== null ? this.location.col - 1 : 0);
 
-    this.readyState = 'complete';
-
-    const resource = this.ownerDocument.resources.addResource();
-
-    setImmediate(() => {
+      this.readyState = 'complete';
+      
       this.dispatchEvent(new Event('load', {target: this}));
 
-      resource.setProgress(1);
+      cb();
     });
   }
 
   [symbols.runSymbol]() {
-    if (this.isRunnable()) {
+    if (this.isRunnable() && !this.readyState) {
       const srcAttr = this.attributes.src;
       if (srcAttr) {
         return this.loadRunNow();
@@ -1645,8 +1758,10 @@ class HTMLScriptElement extends HTMLLoadableElement {
 module.exports.HTMLScriptElement = HTMLScriptElement;
 
 class HTMLSrcableElement extends HTMLLoadableElement {
-  constructor(tagName = null, attrs = [], value = '', location = null) {
-    super(tagName, attrs, value, location);
+  constructor(window, tagName = null, attrs = [], value = '', location = null) {
+    super(window, tagName, attrs, value, location);
+    
+    this.readyState = null;
   }
 
   get src() {
@@ -1658,7 +1773,7 @@ class HTMLSrcableElement extends HTMLLoadableElement {
 
   [symbols.runSymbol]() {
     const srcAttr = this.attributes.src;
-    if (srcAttr) {
+    if (srcAttr && !this.readyState) {
       this._emit('attribute', 'src', srcAttr.value);
     }
     return Promise.resolve();
@@ -1667,8 +1782,8 @@ class HTMLSrcableElement extends HTMLLoadableElement {
 module.exports.HTMLSrcableElement = HTMLSrcableElement;
 
 class HTMLMediaElement extends HTMLSrcableElement {
-  constructor(tagName = null, attrs = [], value = '', location = null) {
-    super(tagName, attrs, value, location);
+  constructor(window, tagName = null, attrs = [], value = '', location = null) {
+    super(window, tagName, attrs, value, location);
 
     this._startTime = 0;
     this._startTimestamp = null;
@@ -1676,6 +1791,8 @@ class HTMLMediaElement extends HTMLSrcableElement {
 
   play() {
     this._startTimestamp = Date.now();
+
+    return Promise.resolve();
   }
   pause() {}
   load() {}
@@ -1683,10 +1800,10 @@ class HTMLMediaElement extends HTMLSrcableElement {
   get paused() {
     return true;
   }
-  set paused(paused) {
+  /* set paused(paused) {
     this._startTime = this.currentTime;
     this._startTimestamp = null;
-  }
+  } */
   get currentTime() {
     return this._startTime + (this._startTimestamp !== null ? (Date.now() - this._startTimestamp) : 0);
   }
@@ -1729,6 +1846,13 @@ class HTMLMediaElement extends HTMLSrcableElement {
     _elementSetter(this, 'error', onerror);
   }
 
+  get onended() {
+    return _elementGetter(this, 'ended');
+  }
+  set onended(onended) {
+    _elementSetter(this, 'ended', onended);
+  }
+
   get HAVE_NOTHING() {
     return HTMLMediaElement.HAVE_NOTHING;
   }
@@ -1758,8 +1882,8 @@ HTMLMediaElement.HAVE_ENOUGH_DATA = 4;
 module.exports.HTMLMediaElement = HTMLMediaElement;
 
 class HTMLSourceElement extends HTMLSrcableElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('SOURCE', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'SOURCE', attrs, value, location);
   }
 }
 module.exports.HTMLSourceElement = HTMLSourceElement;
@@ -1767,73 +1891,194 @@ module.exports.HTMLSourceElement = HTMLSourceElement;
 class SVGElement {}
 module.exports.SVGElement = SVGElement;
 
+const _parseVector = s => {
+  if (Array.isArray(s)) {
+    s = s.join(' ');
+  }
+  
+  const result = [];
+  const ss = s.split(' ');
+  for (let i = 0; i < ss.length; i++) {
+    const s = ss[i];
+    const n = parseFloat(s);
+    if (!isNaN(n)) {
+      result.push(n);
+    } else {
+      return null;
+    }
+  }
+  return result;
+};
 class HTMLIFrameElement extends HTMLSrcableElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('IFRAME', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'IFRAME', attrs, value, location);
 
     this.contentWindow = null;
     this.contentDocument = null;
     this.live = true;
+    
+    this.d = null;
+    this.browser = null;
+    this.onconsole = null;
+    this.xrOffset = new XRRigidTransform();
 
     this.on('attribute', (name, value) => {
       if (name === 'src' && value) {
+        this.readyState = 'loading';
+        
         let url = value;
         const match = url.match(/^javascript:(.+)$/); // XXX should support this for regular fetches too
         if (match) {
           url = 'data:text/html,' + encodeURIComponent(`<!doctype html><html><head><script>${match[1]}</script></head></html>`);
         }
 
-        const resource = this.ownerDocument.resources.addResource();
+        this.ownerDocument.resources.addResource((onprogress, cb) => {
+          (async () => {
+            if (this.d === 2) {
+              if (!this.browser) {
+                const context = GlobalContext.contexts.find(context => context.canvas.ownerDocument === this.ownerDocument);
+                if (context) {
+                  this.browser = new GlobalContext.nativeBrowser.Browser(
+                    context,
+                    this.width||context.canvas.ownerDocument.defaultView.innerWidth,
+                    this.height||context.canvas.ownerDocument.defaultView.innerHeight,
+                    path.join(this.ownerDocument.defaultView[symbols.optionsSymbol].dataPath, '.cef'),
+                    path.join(__dirname, '..', 'node_modules', 'native-browser-deps-macos', 'lib3', 'macos', 'Chromium Embedded Framework.framework')
+                  );
+                  
+                  this.browser.onconsole = (message, source, line) => {
+                    if (this.onconsole) {
+                      this.onconsole(message, source, line);
+                    } else {
+                      console.log(`${source}:${line}: ${message}`);
+                    }
+                  };
+                  
+                  const loadedUrl = await new Promise((accept, reject) => {
+                    this.browser.onloadend = _url => {
+                      accept(_url);
+                    };
+                    this.browser.onloaderror = (errorCode, errorString, failedUrl) => {
+                      reject(new Error(`failed to load page (${errorCode}) ${failedUrl}: ${errorString}`));
+                    };
+                    
+                    this.browser.load(url);
+                  });
+                  
+                  let onmessage = null;
+                  const self = this;
+                  this.contentWindow = {
+                    _emit() {},
+                    location: {
+                      href: loadedUrl
+                    },
+                    postMessage(m) {
+                      self.browser.postMessage(JSON.stringify(m));
+                    },
+                    get onmessage() {
+                      return onmessage;
+                    },
+                    set onmessage(newOnmessage) {
+                      onmessage = newOnmessage;
+                      self.browser.onmessage = newOnmessage ? m => {
+                        newOnmessage(new MessageEvent('messaage', {
+                          data: JSON.parse(m),
+                        }));
+                      } : null;
+                    },
+                    destroy() {
+                      self.browser.destroy();
+                      self.browser = null;
+                    },
+                  };
+                  this.contentDocument = {
+                    _emit() {},
+                  };
 
-        this.ownerDocument.defaultView.fetch(url)
-          .then(res => {
-            if (res.status >= 200 && res.status < 300) {
-              return res.text();
+                  this.readyState = 'complete';
+                  
+                  this.dispatchEvent(new Event('load', {target: this}));
+
+                  cb();
+                } else {
+                  throw new Error('iframe owner document does not have a WebGL context');
+                }
+              } else {
+                this.browser.load(url);
+              }
             } else {
-              return Promise.reject(new Error('iframe src got invalid status code: ' + res.status + ' : ' + url));
+              const res = await this.ownerDocument.defaultView.fetch(url);
+              if (res.status >= 200 && res.status < 300) {
+                const htmlString = await res.text();
+                
+                if (this.live) {
+                  const parentWindow = this.ownerDocument.defaultView;
+                  const options = parentWindow[symbols.optionsSymbol];
+
+                  url = utils._makeNormalizeUrl(options.baseUrl)(url);
+                  const contentWindow = GlobalContext._makeWindow({
+                    url,
+                    baseUrl: url,
+                    args: options.args,
+                    dataPath: options.dataPath,
+                    replacements: options.replacements,
+                  }, parentWindow, parentWindow.top);
+                  const contentDocument = GlobalContext._parseDocument(htmlString, contentWindow);
+
+                  contentDocument.hidden = this.d === 3;
+
+                  contentDocument.xrOffset = this.xrOffset;
+
+                  contentWindow.document = contentDocument;
+
+                  this.contentWindow = contentWindow;
+                  this.contentDocument = contentDocument;
+
+                  this.readyState = 'complete';
+
+                  this.dispatchEvent(new Event('load', {target: this}));
+                }
+
+                cb();
+              } else {
+                throw new Error('iframe src got invalid status code: ' + res.status + ' : ' + url);
+              }
             }
-          })
-          .then(htmlString => {
-            if (this.live) {
-              const parentWindow = this.ownerDocument.defaultView;
-              const options = parentWindow[symbols.optionsSymbol];
+          })()
+            .catch(err => {
+              console.error(err);
 
-              url = utils._makeNormalizeUrl(options.baseUrl)(url);
-              const contentWindow = GlobalContext._makeWindow({
-                url,
-                baseUrl: url,
-                dataPath: options.dataPath,
-              }, parentWindow, parentWindow.top);
-              const contentDocument = GlobalContext._parseDocument(htmlString, contentWindow);
-              contentDocument.hidden = this.hidden;
-
-              contentWindow.document = contentDocument;
-
-              this.contentWindow = contentWindow;
-              this.contentDocument = contentDocument;
-
-              contentDocument.on('framebuffer', framebuffer => {
-                this._emit('framebuffer', framebuffer);
-              });
-              contentWindow.on('destroy', e => {
-                parentWindow.emit('destroy', e);
-              });
+              this.readyState = 'complete';
 
               this.dispatchEvent(new Event('load', {target: this}));
-            }
-          })
-          .catch(err => {
-            console.error(err);
-            this.dispatchEvent(new Event('load', {target: this}));
-          })
-          .finally(() => {
-            setImmediate(() => {
-              resource.setProgress(1);
-            });
-          });
-      } else if (name === 'hidden') {
-        if (this.contentDocument) {
-          this.contentDocument.hidden = value;
+
+              cb(err);
+            })
+        });
+      } else if (name === 'position' || name === 'orientation' || name === 'scale') {
+        const v = _parseVector(value);
+        if (name === 'position' && v.length === 3) {
+          this.xrOffset.position.set(v);
+          this.xrOffset.updateMatrix();
+        } else if (name === 'orientation' && v.length === 4) {
+          this.xrOffset.orientation.set(v);
+          this.xrOffset.updateMatrix();
+        } else if (name === 'scale' && v.length === 3) {
+          this.xrOffset.scale.set(v);
+          this.xrOffset.updateMatrix();
+        }
+      } else if (name === 'd') {
+        if (value === '2') {
+          this.d = 2;
+        } else if (value === '3') {
+          this.d = 3;
+        } else {
+          this.d = null;
+        }
+      } else if (name === 'width' || name === 'height') {
+        if (this.browser) {
+          this.browser.width = this.width;
+          this.browser.height = this.height;
         }
       }
     });
@@ -1843,16 +2088,110 @@ class HTMLIFrameElement extends HTMLSrcableElement {
         this.contentWindow = null;
       }
       this.contentDocument = null;
+      
+      if (this.browser) {
+        this.browser.destroy(); // XXX support this
+      }
     });
   }
-
-  get hidden() {
-    return this.getAttribute('hidden');
+  
+  get width() {
+    return parseInt(this.getAttribute('width') || defaultCanvasSize[0] + '', 10);
   }
-  set hidden(hidden) {
-    this.setAttribute('hidden', hidden);
+  set width(value) {
+    if (typeof value === 'number' && isFinite(value)) {
+      this.setAttribute('width', value);
+    }
   }
-
+  get height() {
+    return parseInt(this.getAttribute('height') || defaultCanvasSize[1] + '', 10);
+  }
+  set height(value) {
+    if (typeof value === 'number' && isFinite(value)) {
+      this.setAttribute('height', value);
+    }
+  }
+  
+  get texture() {
+    if (this.d === 2) {
+      return this.browser && this.browser.texture;
+    } else {
+      return null;
+    }
+  }
+  set texture(texture) {}
+  
+  get position() {
+    return this.getAttribute('position');
+  }
+  set position(position) {
+    if (Array.isArray(position)) {
+      position = position.join(' ');
+    }
+    this.setAttribute('position', position);
+  }
+  
+  get orientation() {
+    return this.getAttribute('orientation');
+  }
+  set orientation(orientation) {
+    if (Array.isArray(orientation)) {
+      orientation = orientation.join(' ');
+    }
+    this.setAttribute('orientation', orientation);
+  }
+  
+  get scale() {
+    return this.getAttribute('scale');
+  }
+  set scale(scale) {
+    if (Array.isArray(scale)) {
+      scale = scale.join(' ');
+    }
+    this.setAttribute('scale', scale);
+  }
+  
+  back() { // XXX should use native navigation APIs for these
+    this.browser && this.browser.back();
+  }
+  forward() {
+    this.browser && this.browser.forward();
+  }
+  reload() {
+    this.browser && this.browser.reload();
+  }
+  
+  sendMouseMove(x, y) {
+    this.browser && this.browser.sendMouseMove(x, y);
+  }
+  sendMouseDown(x, y, button) {
+    this.browser && this.browser.sendMouseDown(x, y, button);
+  }
+  sendMouseUp(x, y, button) {
+    this.browser && this.browser.sendMouseUp(x, y, button);
+  }
+  sendMouseWheel(x, y, deltaX, deltaY) {
+    this.browser && this.browser.sendMouseWheel(x, y, deltaX, deltaY);
+  }
+  sendKeyDown(key, modifiers) {
+    if (this.browser) {
+      this.browser.sendKeyDown(key, modifiers);
+      if (key === 13) {
+        this.browser.sendKeyPress(key, modifiers);
+      }
+    }
+  }
+  sendKeyUp(key, modifiers) {
+    this.browser && this.browser.sendKeyUp(key, modifiers);
+  }
+  sendKeyPress(key, modifiers) {
+    this.browser && this.browser.sendKeyPress(key, modifiers);
+  }
+  
+  runJs(jsString = '', scriptUrl = '<unknown>', startLine = 1) {
+    this.browser && this.browser.runJs(jsString, scriptUrl, startLine);
+  }
+  
   destroy() {
     if (this.live) {
       this._emit('destroy');
@@ -1863,8 +2202,8 @@ class HTMLIFrameElement extends HTMLSrcableElement {
 module.exports.HTMLIFrameElement = HTMLIFrameElement;
 
 class HTMLCanvasElement extends HTMLElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('CANVAS', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'CANVAS', attrs, value, location);
 
     this._context = null;
 
@@ -1906,11 +2245,16 @@ class HTMLCanvasElement extends HTMLElement {
   getBoundingClientRect() {
     return new DOMRect(0, 0, this.clientWidth, this.clientHeight);
   }
-
+  
   get data() {
     return (this._context && this._context.data) || null;
   }
   set data(data) {}
+
+  get texture() {
+    return (this._context && this._context.texture) || null;
+  }
+  set texture(texture) {}
 
   getContext(contextType) {
     if (contextType === '2d') {
@@ -1921,21 +2265,23 @@ class HTMLCanvasElement extends HTMLElement {
       if (this._context === null) {
         this._context = new GlobalContext.CanvasRenderingContext2D(this);
       }
-    } else if (contextType === 'webgl' || contextType === 'webgl2' || contextType === 'xrpresent') {
+    } else if (contextType === 'webgl' || contextType === 'experimental-webgl' || contextType === 'webgl2' || contextType === 'xrpresent') {
       if (this._context && this._context.constructor && this._context.constructor.name !== 'WebGLRenderingContext' && this._context.constructor.name !== 'WebGL2RenderingContext') {
         this._context.destroy();
         this._context = null;
       }
       if (this._context === null) {
-        if (GlobalContext.args.webgl === '1') {
-          if (contextType === 'webgl' || contextType === 'xrpresent') {
-            this._context = new WebGLRenderingContext(this);
+        const window = this.ownerDocument.defaultView;
+
+        if (!window[symbols.optionsSymbol].args || window[symbols.optionsSymbol].args.webgl === '1') {
+          if (contextType === 'webgl' || contextType === 'experimental-webgl' || contextType === 'xrpresent') {
+            this._context = new GlobalContext.WebGLRenderingContext(this);
           }
         } else {
-          if (contextType === 'webgl') {
-            this._context = new WebGLRenderingContext(this);
+          if (contextType === 'webgl' || contextType === 'experimental-webgl') {
+            this._context = new GlobalContext.WebGLRenderingContext(this);
           } else {
-            this._context = new WebGL2RenderingContext(this);
+            this._context = new GlobalContext.WebGL2RenderingContext(this);
           }
         }
       }
@@ -1948,11 +2294,25 @@ class HTMLCanvasElement extends HTMLElement {
     return this._context;
   }
 
-  toDataURL() {
+  toDataURL(type, encoderOptions) {
+    const arrayBuffer = this.toArrayBuffer(type, encoderOptions);
+    return `data:${arrayBuffer.type};base64,${new Buffer(arrayBuffer).toString('base64')}`;
+  }
+
+  toBlob(cb, type, encoderOptions) {
+    process.nextTick(() => {
+      const arrayBuffer = this.toArrayBuffer(type, encoderOptions);
+      const blob = new Blob();
+      blob.buffer = new Buffer(arrayBuffer);
+      cb(blob);
+    });
+  }
+
+  toArrayBuffer(cb, type, encoderOptions) {
     if (!this._context) {
       this.getContext('2d');
     }
-    return this._context.toDataURL();
+    return this._context.toArrayBuffer(type, encoderOptions);
   }
 
   captureStream(frameRate) {
@@ -1962,8 +2322,8 @@ class HTMLCanvasElement extends HTMLElement {
 module.exports.HTMLCanvasElement = HTMLCanvasElement;
 
 class HTMLTemplateElement extends HTMLElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('TEMPLATE', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'TEMPLATE', attrs, value, location);
 
     this._childNodes = new NodeList();
   }
@@ -1980,7 +2340,8 @@ class HTMLTemplateElement extends HTMLElement {
     return new NodeList();
   }
   set childNodes(childNodes) {
-    this._childNodes = childNodes; }
+    this._childNodes = childNodes;
+  }
 
   get children() {
     return [];
@@ -2001,9 +2362,37 @@ class HTMLTemplateElement extends HTMLElement {
 }
 module.exports.HTMLTemplateElement = HTMLTemplateElement;
 
+class HTMLTextareaElement extends HTMLElement {
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'TEXTAREA', attrs, value, location);
+  }
+
+  get value() {
+    return this.textContent;
+  }
+  set value(value) {
+    if (this.ownerDocument) { // if this isn't initialization
+      this.textContent = value;
+    }
+  }
+
+  get textLength() {
+    return this.value.length;
+  }
+  set textLength(textLength) {}
+
+  get innerHTML() {
+    return this.textContent;
+  }
+  set innerHTML(innerHTML) {
+    this.textContent = htmlUnescape(innerHTML);
+  }
+}
+module.exports.HTMLTextareaElement = HTMLTextareaElement;
+
 class CharacterNode extends Node {
-  constructor(value) {
-    super();
+  constructor(window, value) {
+    super(window);
 
     this.value = value;
   }
@@ -2046,8 +2435,8 @@ class CharacterNode extends Node {
 module.exports.CharacterNode = CharacterNode;
 
 class Text extends CharacterNode {
-  constructor(value) {
-    super(value);
+  constructor(window, value) {
+    super(window, value);
   }
 
   get nodeType() {
@@ -2059,6 +2448,11 @@ class Text extends CharacterNode {
     return '#text';
   }
   set nodeName(nodeName) {}
+
+  get nodeValue() {
+    return this.value;
+  }
+  set nodeValue(nodeValue) {}
 
   get firstChild() {
     return null;
@@ -2076,8 +2470,8 @@ class Text extends CharacterNode {
 module.exports.Text = Text;
 
 class Comment extends CharacterNode {
-  constructor(value) {
-    super(value);
+  constructor(window, value) {
+    super(window, value);
   }
 
   get nodeType() {
@@ -2090,6 +2484,11 @@ class Comment extends CharacterNode {
   }
   set nodeName(nodeName) {}
 
+  get nodeValue() {
+    return this.value;
+  }
+  set nodeValue(nodeValue) {}
+
   [util.inspect.custom]() {
     return `<!--${this.value}-->`;
   }
@@ -2097,10 +2496,11 @@ class Comment extends CharacterNode {
 module.exports.Comment = Comment;
 
 class HTMLImageElement extends HTMLSrcableElement {
-  constructor(...args) {
-    if (typeof arguments[0] === 'number') {
-      const [width = 0, height = 0] = arguments;
-      return new HTMLImageElement([
+  constructor(window, attrs = [], value = '', location = null) {
+    if (typeof attrs === 'number') {
+      const width = attrs;
+      const height = value;
+      return new HTMLImageElement(window, [
         {
           name: 'width',
           value: width + '',
@@ -2110,53 +2510,58 @@ class HTMLImageElement extends HTMLSrcableElement {
           value: height + '',
         },
       ], '', null);
-    }
-    const [attrs = [], value = '', location = null] = arguments;
-    super('IMG', attrs, value, location);
+    } else {
+      super(window, 'IMG', attrs, value, location);
 
-    this.image = new bindings.nativeImage();
+      this.image = new bindings.nativeImage();
 
-    this.on('attribute', (name, value) => {
-      if (name === 'src' && value) {
-        const src = value;
+      this.on('attribute', (name, value) => {
+        if (name === 'src' && value) {
+          this.readyState = 'loading';
+          
+          const src = value;
 
-        const resource = this.ownerDocument.resources.addResource();
+          this.ownerDocument.resources.addResource((onprogress, cb) => {
+            this.ownerDocument.defaultView.fetch(src)
+              .then(res => {
+                if (res.status >= 200 && res.status < 300) {
+                  return res.arrayBuffer();
+                } else {
+                  return Promise.reject(new Error(`img src got invalid status code (url: ${JSON.stringify(src)}, code: ${res.status})`));
+                }
+              })
+              .then(arrayBuffer => new Promise((accept, reject) => {
+                this.image.load(arrayBuffer, err => {
+                  if (!err) {
+                    accept();
+                  } else {
+                    reject(new Error(`failed to decode image: ${err.message} (url: ${JSON.stringify(src)}, size: ${arrayBuffer.byteLength}, message: ${err})`));
+                  }
+                });
+              }))
+              .then(() => {
+                this.readyState = 'complete';
+                
+                this._dispatchEventOnDocumentReady(new Event('load', {target: this}));
+                
+                cb();
+              })
+              .catch(err => {
+                console.warn('failed to load image:', src);
 
-        this.ownerDocument.defaultView.fetch(src)
-          .then(res => {
-            if (res.status >= 200 && res.status < 300) {
-              return res.arrayBuffer();
-            } else {
-              return Promise.reject(new Error(`img src got invalid status code (url: ${JSON.stringify(src)}, code: ${res.status})`));
-            }
-          })
-          .then(arrayBuffer => new Promise((accept, reject) => {
-            this.image.load(arrayBuffer, err => {
-              if (!err) {
-                accept();
-              } else {
-                reject(new Error(`failed to decode image: ${err.message} (url: ${JSON.stringify(src)}, size: ${arrayBuffer.byteLength}, message: ${err})`));
-              }
-            });
-          }))
-          .then(() => {
-            this._dispatchEventOnDocumentReady(new Event('load', {target: this}));
-          })
-          .catch(err => {
-            console.warn('failed to load image:', src);
-
-            const e = new ErrorEvent('error', {target: this});
-            e.message = err.message;
-            e.stack = err.stack;
-            this._dispatchEventOnDocumentReady(e);
-          })
-          .finally(() => {
-            setImmediate(() => {
-              resource.setProgress(1);
-            });
+                this.readyState = 'complete';
+                
+                const e = new ErrorEvent('error', {target: this});
+                e.message = err.message;
+                e.stack = err.stack;
+                this._dispatchEventOnDocumentReady(e);
+                
+                cb(err);
+              });
           });
-      }
-    });
+        }
+      });
+    }
   }
 
   get src() {
@@ -2230,67 +2635,82 @@ class TimeRanges {
 module.exports.TimeRanges = TimeRanges;
 
 class HTMLAudioElement extends HTMLMediaElement {
-  constructor(attrs = [], value = '') {
-    super('AUDIO', attrs, value);
+  constructor(window, attrs = [], value = '') {    
+    if (typeof attrs === 'string') {
+      const src = attrs;
+      return new HTMLAudioElement(window, [
+        {
+          name: 'src',
+          value: src + '',
+        },
+      ], '', null);
+    } else {
+      super(window, 'AUDIO', attrs, value);
 
-    this.readyState = HTMLMediaElement.HAVE_NOTHING;
-    this.audio = new bindings.nativeAudio.Audio();
+      this.readyState = HTMLMediaElement.HAVE_NOTHING;
+      this.audio = new bindings.nativeAudio.Audio();
 
-    this.on('attribute', (name, value) => {
-      if (name === 'src' && value) {
-        const src = value;
+      this.on('attribute', (name, value) => {
+        if (name === 'src' && value) {
+          const src = value;
 
-        const resource = this.ownerDocument.resources.addResource();
+          this.ownerDocument.resources.addResource((onprogress, cb) => {
+            this.ownerDocument.defaultView.fetch(src)
+              .then(res => {
+                if (res.status >= 200 && res.status < 300) {
+                  return res.arrayBuffer();
+                } else {
+                  return Promise.reject(new Error(`audio src got invalid status code (url: ${JSON.stringify(src)}, code: ${res.status})`));
+                }
+              })
+              .then(arrayBuffer => {
+                try {
+                  this.audio.load(arrayBuffer);
+                } catch(err) {
+                  throw new Error(`failed to decode audio: ${err.message} (url: ${JSON.stringify(src)}, size: ${arrayBuffer.byteLength})`);
+                }
+              })
+              .then(() => {
+                this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
 
-        this.ownerDocument.defaultView.fetch(src)
-          .then(res => {
-            if (res.status >= 200 && res.status < 300) {
-              return res.arrayBuffer();
-            } else {
-              return Promise.reject(new Error(`audio src got invalid status code (url: ${JSON.stringify(src)}, code: ${res.status})`));
-            }
-          })
-          .then(arrayBuffer => {
-            try {
-              this.audio.load(arrayBuffer);
-            } catch(err) {
-              throw new Error(`failed to decode audio: ${err.message} (url: ${JSON.stringify(src)}, size: ${arrayBuffer.byteLength})`);
-            }
-          })
-          .then(() => {
-            this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
+                const progressEvent = new Event('progress', {target: this});
+                progressEvent.loaded = 1;
+                progressEvent.total = 1;
+                progressEvent.lengthComputable = true;
+                this._emit(progressEvent);
 
-            const progressEvent = new Event('progress', {target: this});
-            progressEvent.loaded = 1;
-            progressEvent.total = 1;
-            progressEvent.lengthComputable = true;
-            this._emit(progressEvent);
+                this._dispatchEventOnDocumentReady(new Event('canplay', {target: this}));
+                this._dispatchEventOnDocumentReady(new Event('canplaythrough', {target: this}));
+                
+                cb();
+              })
+              .catch(err => {
+                console.warn('failed to load audio:', src);
 
-            this._dispatchEventOnDocumentReady(new Event('canplay', {target: this}));
-            this._dispatchEventOnDocumentReady(new Event('canplaythrough', {target: this}));
-          })
-          .catch(err => {
-            console.warn('failed to load audio:', src);
-
-            const e = new ErrorEvent('error', {target: this});
-            e.message = err.message;
-            e.stack = err.stack;
-            this._dispatchEventOnDocumentReady(e);
-          })
-          .finally(() => {
-            setImmediate(() => {
-              resource.setProgress(1);
-            });
+                const e = new ErrorEvent('error', {target: this});
+                e.message = err.message;
+                e.stack = err.stack;
+                this._dispatchEventOnDocumentReady(e);
+                
+                cb(err);
+              });
           });
-      }
-    });
+        }
+      });
+    }
   }
 
   play() {
     this.audio.play();
+
+    return Promise.resolve();
   }
   pause() {
     this.audio.pause();
+  }
+  
+  get paused() {
+    return this.audio ? this.audio.paused : true;
   }
 
   get currentTime() {
@@ -2299,6 +2719,16 @@ class HTMLAudioElement extends HTMLMediaElement {
   set currentTime(currentTime) {
     if (this.audio) {
       this.audio.currentTime = currentTime;
+    }
+  }
+
+  get loop() {
+    return this.audio ? this.audio.loop : false;
+  }
+
+  set loop(loop) {
+    if (this.audio) {
+      this.audio.loop = loop;
     }
   }
 
@@ -2315,42 +2745,54 @@ class HTMLAudioElement extends HTMLMediaElement {
     return new TimeRanges([0, this.duration]);
   }
   set buffered(buffered) {}
+
+  get onended() {
+    return this.audio && this.audio.onended;
+  }
+  set onended(onended) {
+    if (this.audio) {
+      this.audio.onended = onended;
+    }
+  }
+
 };
 module.exports.HTMLAudioElement = HTMLAudioElement;
 
 class HTMLVideoElement extends HTMLMediaElement {
-  constructor(attrs = [], value = '', location = null) {
-    super('VIDEO', attrs, value, location);
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'VIDEO', attrs, value, location);
 
     this.readyState = HTMLMediaElement.HAVE_NOTHING;
     this.data = new Uint8Array(0);
 
     this.on('attribute', (name, value) => {
       if (name === 'src' && value) {
+        this.readyState = 'loading';
+        
         const src = value;
 
         this.readyState = HTMLMediaElement.HAVE_ENOUGH_DATA;
 
         if (urls.has(value)) {
           const blob = urls.get(value);
-          if (blob instanceof Bindings.bindings.nativeVideo.VideoDevice) {
+          if (blob instanceof bindings.nativeVideo.VideoDevice) {
             this.video = blob;
           }
         }
 
-        const resource = this.ownerDocument.resources.addResource();
-
-        setImmediate(() => {
+        this.ownerDocument.resources.addResource((onprogress, cb) => {
           const progressEvent = new Event('progress', {target: this});
           progressEvent.loaded = 1;
           progressEvent.total = 1;
           progressEvent.lengthComputable = true;
           this._emit(progressEvent);
+          
+          this.readyState = 'complete';
 
           this._dispatchEventOnDocumentReady(new Event('canplay', {target: this}));
           this._dispatchEventOnDocumentReady(new Event('canplaythrough', {target: this}));
 
-          resource.setProgress(1);
+          cb();
         });
       }
     });
@@ -2406,6 +2848,8 @@ class HTMLVideoElement extends HTMLMediaElement {
         _getOptions(this.video.constraints.facingMode)
       );
     }
+
+    return Promise.resolve();
   }
   pause() {
     if (this.video) {
@@ -2524,6 +2968,8 @@ class HTMLVideoElement extends HTMLMediaElement {
 
   play() {
     this.video.play();
+
+    return Promise.resolve();
   }
   pause() {
     this.video.pause();
@@ -2582,6 +3028,71 @@ class HTMLVideoElement extends HTMLMediaElement {
 }
 */
 
+function createImageBitmap(src, x, y, w, h, options) {
+  let image;
+  if (src.constructor.name === 'HTMLImageElement') {
+    image = src.image;
+  } else if (src.constructor.name === 'Blob') {
+    image = new bindings.nativeImage();
+    try {
+      image.load(src.buffer);
+    } catch (err) {
+      return Promise.reject(new Error('failed to load image'));
+    }
+  } else {
+    return Promise.reject(new Error('invalid arguments. Unknown constructor type: ' + src.constructor.name));
+  }
+
+  if (typeof x === 'object') {
+    options = x;
+    x = undefined;
+  }
+
+  x = x || 0;
+  y = y || 0;
+  w = w || image.width;
+  h = h || image.height;
+  const flipY = !!options && options.imageOrientation === 'flipY';
+  const imageBitmap = new ImageBitmap(
+    image,
+    x,
+    y,
+    w,
+    h,
+    flipY,
+  );
+  return Promise.resolve(imageBitmap);
+}
+module.exports.createImageBitmap = createImageBitmap;
+
+class HTMLDivElement extends HTMLElement {
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'DIV', attrs, value, location);
+  }
+}
+module.exports.HTMLDivElement = HTMLDivElement;
+
+class HTMLUListElement extends HTMLElement {
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'ULIST', attrs, value, location);
+  }
+}
+module.exports.HTMLUListElement = HTMLUListElement;
+
+class HTMLLIElement extends HTMLElement {
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'LI', attrs, value, location);
+  }
+}
+module.exports.HTMLLIElement = HTMLLIElement;
+
+class HTMLTableElement extends HTMLElement {
+  constructor(window, attrs = [], value = '', location = null) {
+    super(window, 'TABLE', attrs, value, location);
+  }
+}
+module.exports.HTMLTableElement = HTMLTableElement;
+
 function _hash(s) {
   let result = 0;
   for (let i = 0; i < s.length; i++) {
@@ -2589,3 +3100,39 @@ function _hash(s) {
   }
   return result;
 }
+
+const getBoundDOMElements = window => {
+  const bind = (OldClass, makeClass) => {
+    const NewClass = makeClass((a, b, c, d) => new OldClass(window, a, b, c, d));
+    NewClass.prototype = OldClass.prototype;
+    NewClass.constructor = OldClass;
+    return NewClass;
+  };
+  return {
+    Element: bind(Element, b => function Element() { return b.apply(this, arguments); }),
+    HTMLElement: bind(HTMLElement, b => function HTMLElement() { return b.apply(this, arguments); }),
+    HTMLHeadElement: bind(HTMLHeadElement, b => function HTMLHeadElement() { return b.apply(this, arguments); }),
+    HTMLBodyElement: bind(HTMLBodyElement, b => function HTMLBodyElement() { return b.apply(this, arguments); }),
+    HTMLAnchorElement: bind(HTMLAnchorElement, b => function HTMLAnchorElement() { return b.apply(this, arguments); }),
+    HTMLStyleElement: bind(HTMLStyleElement, b => function HTMLStyleElement() { return b.apply(this, arguments); }),
+    HTMLLinkElement: bind(HTMLLinkElement, b => function HTMLLinkElement() { return b.apply(this, arguments); }),
+    HTMLScriptElement: bind(HTMLScriptElement, b => function HTMLScriptElement() { return b.apply(this, arguments); }),
+    HTMLImageElement: bind(HTMLImageElement, b => function HTMLImageElement() { return b.apply(this, arguments); }),
+    HTMLAudioElement: bind(HTMLAudioElement, b => function HTMLAudioElement() { return b.apply(this, arguments); }),
+    HTMLVideoElement: bind(HTMLVideoElement, b => function HTMLVideoElement() { return b.apply(this, arguments); }),
+    HTMLSourceElement: bind(HTMLSourceElement, b => function HTMLSourceElement() { return b.apply(this, arguments); }),
+    SVGElement: bind(SVGElement, b => function SVGElement() { return b.apply(this, arguments); }),
+    HTMLIFrameElement: bind(HTMLIFrameElement, b => function HTMLIFrameElement() { return b.apply(this, arguments); }),
+    HTMLCanvasElement: bind(HTMLCanvasElement, b => function HTMLCanvasElement() { return b.apply(this, arguments); }),
+    HTMLTextareaElement: bind(HTMLTextareaElement, b => function HTMLTextareaElement() { return b.apply(this, arguments); }),
+    HTMLTemplateElement: bind(HTMLTemplateElement, b => function HTMLTemplateElement() { return b.apply(this, arguments); }),
+    HTMLDivElement: bind(HTMLDivElement, b => function HTMLDivElement() { return b.apply(this, arguments); }),
+    HTMLUListElement: bind(HTMLUListElement, b => function HTMLUListElement() { return b.apply(this, arguments); }),
+    HTMLLIElement: bind(HTMLLIElement, b => function HTMLLIElement() { return b.apply(this, arguments); }),
+    HTMLTableElement: bind(HTMLTableElement, b => function HTMLTableElement() { return b.apply(this, arguments); }),
+    Node: bind(Node, b => function Node() { return b.apply(this, arguments); }),
+    Text: bind(Text, b => function Text() { return b.apply(this, arguments); }),
+    Comment: bind(Comment, b => function Comment() { return b.apply(this, arguments); }),
+  };
+};
+module.exports.getBoundDOMElements = getBoundDOMElements;

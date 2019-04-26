@@ -28,8 +28,8 @@ module.exports._parseDocumentAst = _parseDocumentAst;
 function initDocument (document, window) {
   const html = document.childNodes.find(el => el.tagName === 'HTML');
   const documentElement = html || (document.childNodes.length > 0 ? document.childNodes[0] : null);
-  const head = html ? html.childNodes.find(el => el.tagName === 'HEAD') : null;
-  const body = html ? html.childNodes.find(el => el.tagName === 'BODY') : null;
+  const head = html ? html.childNodes.find(el => el.tagName === 'HEAD') : new window.HTMLHeadElement();
+  const body = html ? html.childNodes.find(el => el.tagName === 'BODY') : new window.HTMLBodyElement();
 
   document.documentElement = documentElement;
   document.readyState = 'loading';
@@ -37,34 +37,18 @@ function initDocument (document, window) {
   document.body = body;
   document.location = window.location;
   document.cookie = '';
-  document.createElement = tagName => {
+  document.referrer = '';
+  document.createElement = (tagName, options = {}) => {
     tagName = tagName.toUpperCase();
     const HTMLElementTemplate = window[symbols.htmlTagsSymbol][tagName];
-    const element = HTMLElementTemplate ? new HTMLElementTemplate() : new DOM.HTMLElement(tagName);
-    element.ownerDocument = document;
+    const element = HTMLElementTemplate ? new HTMLElementTemplate() : new window.HTMLElement(tagName);
+    options.is && element.setAttribute('is', options.is);
     return element;
   };
-  document.createElementNS = (namespace, tagName) => document.createElement(tagName);
-  document.createDocumentFragment = () => {
-    const documentFragment = new DocumentFragment();
-    documentFragment.ownerDocument = document;
-    return documentFragment;
-  };
-  document.createRange = () => {
-    const range = new Range();
-    range.ownerDocument = document;
-    return range;
-  };
-  document.createTextNode = text => {
-    const node = new DOM.Text(text);
-    node.ownerDocument = document;
-    return node;
-  }
-  document.createComment = comment => {
-    const node = new DOM.Comment(comment);
-    node.ownerDocument = document;
-    return node;
-  };
+  document.createElementNS = (namespace, tagName, options) => document.createElement(tagName, options);
+  document.createDocumentFragment = () => new window.DocumentFragment();
+  document.createTextNode = text => new window.Text(text);
+  document.createComment = comment => new window.Comment(comment);
   document.createEvent = type => {
     switch (type) {
       case 'KeyboardEvent':
@@ -81,6 +65,7 @@ function initDocument (document, window) {
         throw new Error('invalid createEvent type: ' + type);
     }
   };
+  document.createRange = () => new window.Range();
   document.importNode = (el, deep) => el.cloneNode(deep);
   document.scripts = utils._makeHtmlCollectionProxy(document.documentElement, 'script');
   document.styleSheets = [];
@@ -159,7 +144,7 @@ function initDocument (document, window) {
   process.nextTick(async () => {
     if (body) {
       const bodyChildNodes = body.childNodes;
-      body.childNodes = new DOM.NodeList();
+      body.childNodes = new window.NodeList();
 
       try {
         await GlobalContext._runHtml(document.head, window);
@@ -169,13 +154,19 @@ function initDocument (document, window) {
 
       body.childNodes = bodyChildNodes;
 
-      document.dispatchEvent(new Event('DOMContentLoaded', {target: document}));
-
       try {
         await GlobalContext._runHtml(document.body, window);
       } catch(err) {
         console.warn(err);
       }
+
+      document.readyState = 'interactive';
+      document.dispatchEvent(new Event('readystatechange', {target: document}));
+
+      document.dispatchEvent(new Event('DOMContentLoaded', {
+        target: document,
+        bubbles: true,
+      }));
     } else {
       try {
         await GlobalContext._runHtml(document, window);
@@ -183,11 +174,14 @@ function initDocument (document, window) {
         console.warn(err);
       }
 
-      document.dispatchEvent(new Event('DOMContentLoaded', {target: document}));
-    }
+      document.readyState = 'interactive';
+      document.dispatchEvent(new Event('readystatechange', {target: document}));
 
-    document.readyState = 'interactive';
-    document.dispatchEvent(new Event('readystatechange', {target: document}));
+      document.dispatchEvent(new Event('DOMContentLoaded', {
+        target: document,
+        bubbles: true,
+      }));
+    }
 
     document.readyState = 'complete';
     document.dispatchEvent(new Event('readystatechange', {target: document}));
@@ -196,24 +190,13 @@ function initDocument (document, window) {
     window.dispatchEvent(new Event('load', {target: window}));
 
     const displays = window.navigator.getVRDisplaysSync();
-    if (displays.length > 0) {
+    if (displays.length > 0 && (!window[symbols.optionsSymbol].args || ['all', 'webvr'].includes(window[symbols.optionsSymbol].args.xr))) {
       const _initDisplays = () => {
-        if (!_tryEmitDisplay()) {
-          _delayFrames(() => {
-            _tryEmitDisplay();
-          }, 1);
-        }
-      };
-      const _tryEmitDisplay = () => {
         const presentingDisplay = displays.find(display => display.isPresenting);
-        if (presentingDisplay) {
-          if (presentingDisplay.constructor.name === 'FakeVRDisplay') {
-            _emitOneDisplay(presentingDisplay);
-          }
-          return true;
+        if (presentingDisplay && presentingDisplay.constructor.name === 'FakeVRDisplay') {
+          _emitOneDisplay(presentingDisplay);
         } else {
           _emitOneDisplay(displays[0]);
-          return false;
         }
       };
       const _emitOneDisplay = display => {
@@ -225,17 +208,15 @@ function initDocument (document, window) {
         if (n === 0) {
           fn();
         } else {
-          try {
-            window.requestAnimationFrame(() => {
-              _delayFrames(fn, n - 1);
-            });
-          } catch(err) {
-            console.log(err.stack);
-          }
+          window.requestAnimationFrame(() => {
+            _delayFrames(fn, n - 1);
+          });
         }
       };
       if (document.resources.resources.length === 0) {
-        _initDisplays();
+        _delayFrames(() => {
+          _initDisplays();
+        }, 2); // arbitary delay to give site time to bind events
       } else {
         const _update = () => {
           if (document.resources.resources.length === 0) {
@@ -279,9 +260,10 @@ class DOMImplementation {
 module.exports.DOMImplementation = DOMImplementation;
 
 class Document extends DOM.HTMLLoadableElement {
-  constructor() {
-    super('DOCUMENT');
+  constructor(window) {
+    super(window, 'DOCUMENT');
 
+    this.ownerDocument = null;
     this.hidden = false;
   }
 
@@ -337,8 +319,8 @@ module.exports.Document = Document;
 GlobalContext.Document = Document;
 
 class DocumentFragment extends DOM.HTMLElement {
-  constructor() {
-    super('DOCUMENTFRAGMENT');
+  constructor(window) {
+    super(window, 'DOCUMENTFRAGMENT');
   }
 
   get nodeType() {
@@ -349,8 +331,8 @@ module.exports.DocumentFragment = DocumentFragment;
 GlobalContext.DocumentFragment = DocumentFragment;
 
 class Range extends DocumentFragment {
-  constructor() {
-    super('RANGE');
+  constructor(window) {
+    super(window, 'RANGE');
   }
 
   createContextualFragment(str) {
@@ -358,5 +340,23 @@ class Range extends DocumentFragment {
     fragment.innerHTML = str;
     return fragment;
   }
+
+  setStart() {}
+  setEnd() {}
 }
 module.exports.Range = Range;
+
+const getBoundDocumentElements = window => {
+  const bind = (OldClass, makeClass) => {
+    const NewClass = makeClass((a, b, c, d) => new OldClass(window, a, b, c, d));
+    NewClass.prototype = OldClass.prototype;
+    NewClass.constructor = OldClass;
+    return NewClass;
+  };
+  return {
+    Document: bind(Document, b => function Document() { return b.apply(this, arguments); }),
+    DocumentFragment: bind(DocumentFragment, b => function DocumentFragment() { return b.apply(this, arguments); }),
+    Range: bind(Range, b => function Range() { return b.apply(this, arguments); }),
+  };
+};
+module.exports.getBoundDocumentElements = getBoundDocumentElements;

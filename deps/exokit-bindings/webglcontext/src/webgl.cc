@@ -38,8 +38,6 @@ void unregisterGLObj(GLuint obj); */
 
 template<NAN_METHOD(F)>
 NAN_METHOD(glCallWrap) {
-  // Nan::HandleScope scope;
-
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
   if (gl->live) {
@@ -48,12 +46,12 @@ NAN_METHOD(glCallWrap) {
     }
 
     F(info);
+  } else {
+    info.GetReturnValue().Set(JS_STR(""));
   }
 }
-template<NAN_METHOD(F)>
-NAN_METHOD(glSwitchCallWrap) {
-  // Nan::HandleScope scope;
-
+template<NAN_GETTER(F)>
+NAN_GETTER(glGetterWrap) {
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
   if (gl->live) {
@@ -61,7 +59,9 @@ NAN_METHOD(glSwitchCallWrap) {
       windowsystem::SetCurrentWindowContext(gl->windowHandle);
     }
 
-    F(info);
+    F(property, info);
+  } else {
+    info.GetReturnValue().Set(JS_STR(""));
   }
 }
 
@@ -69,6 +69,7 @@ template <typename T>
 void setGlConstants(T &proto) {
   // OpenGL ES 2.1 constants
 
+   //---------------------------------------------------------------------------
   /* ClearBufferMask */
   JS_GL_CONSTANT(DEPTH_BUFFER_BIT);
   JS_GL_CONSTANT(STENCIL_BUFFER_BIT);
@@ -625,6 +626,279 @@ void setGlConstants(T &proto) {
 
   // external
   JS_GL_SET_CONSTANT("TEXTURE_EXTERNAL_OES", 0x8D65);
+
+  //----------------------------------------------------------------------------
+  // WebGL 2 constants from:
+  // https://www.khronos.org/registry/webgl/specs/latest/2.0/
+  // Those commented out already defined for WebGL
+  JS_GL_CONSTANT(READ_BUFFER);
+  JS_GL_CONSTANT(UNPACK_ROW_LENGTH);
+  JS_GL_CONSTANT(UNPACK_SKIP_ROWS);
+  JS_GL_CONSTANT(UNPACK_SKIP_PIXELS);
+  JS_GL_CONSTANT(PACK_ROW_LENGTH);
+  JS_GL_CONSTANT(PACK_SKIP_ROWS);
+  JS_GL_CONSTANT(PACK_SKIP_PIXELS);
+  JS_GL_CONSTANT(COLOR);
+  JS_GL_CONSTANT(DEPTH);
+  JS_GL_CONSTANT(STENCIL);
+  JS_GL_CONSTANT(RED);
+  //JS_GL_CONSTANT(RGB8);
+  //JS_GL_CONSTANT(RGBA8);
+  //JS_GL_CONSTANT(RGB10_A2);
+  JS_GL_CONSTANT(TEXTURE_BINDING_3D);
+  JS_GL_CONSTANT(UNPACK_SKIP_IMAGES);
+  JS_GL_CONSTANT(UNPACK_IMAGE_HEIGHT);
+  JS_GL_CONSTANT(TEXTURE_3D);
+  JS_GL_CONSTANT(TEXTURE_WRAP_R);
+  JS_GL_CONSTANT(MAX_3D_TEXTURE_SIZE);
+  JS_GL_CONSTANT(UNSIGNED_INT_2_10_10_10_REV);
+  JS_GL_CONSTANT(MAX_ELEMENTS_VERTICES);
+  JS_GL_CONSTANT(MAX_ELEMENTS_INDICES);
+  JS_GL_CONSTANT(TEXTURE_MIN_LOD);
+  JS_GL_CONSTANT(TEXTURE_MAX_LOD);
+  JS_GL_CONSTANT(TEXTURE_BASE_LEVEL);
+  JS_GL_CONSTANT(TEXTURE_MAX_LEVEL);
+  JS_GL_CONSTANT(MIN);
+  JS_GL_CONSTANT(MAX);
+  JS_GL_CONSTANT(DEPTH_COMPONENT24);
+  JS_GL_CONSTANT(MAX_TEXTURE_LOD_BIAS);
+  JS_GL_CONSTANT(TEXTURE_COMPARE_MODE);
+  JS_GL_CONSTANT(TEXTURE_COMPARE_FUNC);
+  JS_GL_CONSTANT(CURRENT_QUERY);
+  JS_GL_CONSTANT(QUERY_RESULT);
+  JS_GL_CONSTANT(QUERY_RESULT_AVAILABLE);
+  JS_GL_CONSTANT(STREAM_READ);
+  JS_GL_CONSTANT(STREAM_COPY);
+  JS_GL_CONSTANT(STATIC_READ);
+  JS_GL_CONSTANT(STATIC_COPY);
+  JS_GL_CONSTANT(DYNAMIC_READ);
+  JS_GL_CONSTANT(DYNAMIC_COPY);
+  //JS_GL_CONSTANT(MAX_DRAW_BUFFERS);
+  //JS_GL_CONSTANT(DRAW_BUFFER0);
+  //JS_GL_CONSTANT(DRAW_BUFFER1);
+  //JS_GL_CONSTANT(DRAW_BUFFER2);
+  //JS_GL_CONSTANT(DRAW_BUFFER3);
+  //JS_GL_CONSTANT(DRAW_BUFFER4);
+  //JS_GL_CONSTANT(DRAW_BUFFER5);
+  //JS_GL_CONSTANT(DRAW_BUFFER6);
+  //JS_GL_CONSTANT(DRAW_BUFFER7);
+  //JS_GL_CONSTANT(DRAW_BUFFER8);
+  //JS_GL_CONSTANT(DRAW_BUFFER9);
+  //JS_GL_CONSTANT(DRAW_BUFFER10);
+  //JS_GL_CONSTANT(DRAW_BUFFER11);
+  //JS_GL_CONSTANT(DRAW_BUFFER12);
+  //JS_GL_CONSTANT(DRAW_BUFFER13);
+  //JS_GL_CONSTANT(DRAW_BUFFER14);
+  //JS_GL_CONSTANT(DRAW_BUFFER15);
+  JS_GL_CONSTANT(MAX_FRAGMENT_UNIFORM_COMPONENTS);
+  JS_GL_CONSTANT(MAX_VERTEX_UNIFORM_COMPONENTS);
+  JS_GL_CONSTANT(SAMPLER_3D);
+  JS_GL_CONSTANT(SAMPLER_2D_SHADOW);
+  JS_GL_CONSTANT(FRAGMENT_SHADER_DERIVATIVE_HINT);
+  //JS_GL_CONSTANT(PIXEL_PACK_BUFFER);
+  //JS_GL_CONSTANT(PIXEL_UNPACK_BUFFER);
+  //JS_GL_CONSTANT(PIXEL_PACK_BUFFER_BINDING);
+  //JS_GL_CONSTANT(PIXEL_UNPACK_BUFFER_BINDING);
+  JS_GL_CONSTANT(FLOAT_MAT2x3);
+  JS_GL_CONSTANT(FLOAT_MAT2x4);
+  JS_GL_CONSTANT(FLOAT_MAT3x2);
+  JS_GL_CONSTANT(FLOAT_MAT3x4);
+  JS_GL_CONSTANT(FLOAT_MAT4x2);
+  JS_GL_CONSTANT(FLOAT_MAT4x3);
+  JS_GL_CONSTANT(SRGB);
+  //JS_GL_CONSTANT(SRGB8);
+  JS_GL_CONSTANT(SRGB8_ALPHA8);
+  JS_GL_CONSTANT(COMPARE_REF_TO_TEXTURE);
+  //JS_GL_CONSTANT(RGBA32F);
+  //JS_GL_CONSTANT(RGB32F);
+  //JS_GL_CONSTANT(RGBA16F);
+  //JS_GL_CONSTANT(RGB16F);
+  JS_GL_CONSTANT(VERTEX_ATTRIB_ARRAY_INTEGER);
+  JS_GL_CONSTANT(MAX_ARRAY_TEXTURE_LAYERS);
+  JS_GL_CONSTANT(MIN_PROGRAM_TEXEL_OFFSET);
+  JS_GL_CONSTANT(MAX_PROGRAM_TEXEL_OFFSET);
+  JS_GL_CONSTANT(MAX_VARYING_COMPONENTS);
+  JS_GL_CONSTANT(TEXTURE_2D_ARRAY);
+  JS_GL_CONSTANT(TEXTURE_BINDING_2D_ARRAY);
+  //JS_GL_CONSTANT(R11F_G11F_B10F);
+  JS_GL_CONSTANT(UNSIGNED_INT_10F_11F_11F_REV);
+  //JS_GL_CONSTANT(RGB9_E5);
+  JS_GL_CONSTANT(UNSIGNED_INT_5_9_9_9_REV);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BUFFER_MODE);
+  JS_GL_CONSTANT(MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_VARYINGS);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BUFFER_START);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BUFFER_SIZE);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+  JS_GL_CONSTANT(RASTERIZER_DISCARD);
+  JS_GL_CONSTANT(MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS);
+  JS_GL_CONSTANT(MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS);
+  JS_GL_CONSTANT(INTERLEAVED_ATTRIBS);
+  JS_GL_CONSTANT(SEPARATE_ATTRIBS);
+  //JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BUFFER);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BUFFER_BINDING);
+  JS_GL_CONSTANT(RGBA32UI);
+  JS_GL_CONSTANT(RGB32UI);
+  JS_GL_CONSTANT(RGBA16UI);
+  JS_GL_CONSTANT(RGB16UI);
+  //JS_GL_CONSTANT(RGBA8UI);
+  //JS_GL_CONSTANT(RGB8UI);
+  JS_GL_CONSTANT(RGBA32I);
+  JS_GL_CONSTANT(RGB32I);
+  JS_GL_CONSTANT(RGBA16I);
+  JS_GL_CONSTANT(RGB16I);
+  JS_GL_CONSTANT(RGBA8I);
+  JS_GL_CONSTANT(RGB8I);
+  JS_GL_CONSTANT(RED_INTEGER);
+  JS_GL_CONSTANT(RGB_INTEGER);
+  JS_GL_CONSTANT(RGBA_INTEGER);
+  JS_GL_CONSTANT(SAMPLER_2D_ARRAY);
+  JS_GL_CONSTANT(SAMPLER_2D_ARRAY_SHADOW);
+  JS_GL_CONSTANT(SAMPLER_CUBE_SHADOW);
+  JS_GL_CONSTANT(UNSIGNED_INT_VEC2);
+  JS_GL_CONSTANT(UNSIGNED_INT_VEC3);
+  JS_GL_CONSTANT(UNSIGNED_INT_VEC4);
+  JS_GL_CONSTANT(INT_SAMPLER_2D);
+  JS_GL_CONSTANT(INT_SAMPLER_3D);
+  JS_GL_CONSTANT(INT_SAMPLER_CUBE);
+  JS_GL_CONSTANT(INT_SAMPLER_2D_ARRAY);
+  JS_GL_CONSTANT(UNSIGNED_INT_SAMPLER_2D);
+  JS_GL_CONSTANT(UNSIGNED_INT_SAMPLER_3D);
+  JS_GL_CONSTANT(UNSIGNED_INT_SAMPLER_CUBE);
+  JS_GL_CONSTANT(UNSIGNED_INT_SAMPLER_2D_ARRAY);
+  JS_GL_CONSTANT(DEPTH_COMPONENT32F);
+  JS_GL_CONSTANT(DEPTH32F_STENCIL8);
+  JS_GL_CONSTANT(FLOAT_32_UNSIGNED_INT_24_8_REV);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_RED_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_GREEN_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_BLUE_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE);
+  JS_GL_CONSTANT(FRAMEBUFFER_DEFAULT);
+  //JS_GL_CONSTANT(DEPTH_STENCIL_ATTACHMENT);
+  //JS_GL_CONSTANT(DEPTH_STENCIL);
+  JS_GL_CONSTANT(UNSIGNED_INT_24_8);
+  //JS_GL_CONSTANT(DEPTH24_STENCIL8);
+  JS_GL_CONSTANT(UNSIGNED_NORMALIZED);
+  //JS_GL_CONSTANT(DRAW_FRAMEBUFFER_BINDING); /* Same as FRAMEBUFFER_BINDING */
+  //JS_GL_CONSTANT(READ_FRAMEBUFFER);
+  //JS_GL_CONSTANT(DRAW_FRAMEBUFFER);
+  //JS_GL_CONSTANT(READ_FRAMEBUFFER_BINDING);
+  JS_GL_CONSTANT(RENDERBUFFER_SAMPLES);
+  JS_GL_CONSTANT(FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER);
+  //JS_GL_CONSTANT(MAX_COLOR_ATTACHMENTS);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT1);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT2);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT3);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT4);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT5);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT6);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT7);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT8);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT9);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT10);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT11);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT12);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT13);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT14);
+  //JS_GL_CONSTANT(COLOR_ATTACHMENT15);
+  JS_GL_CONSTANT(FRAMEBUFFER_INCOMPLETE_MULTISAMPLE);
+  JS_GL_CONSTANT(MAX_SAMPLES);
+  //JS_GL_CONSTANT(HALF_FLOAT);
+  JS_GL_CONSTANT(RG);
+  JS_GL_CONSTANT(RG_INTEGER);
+  //JS_GL_CONSTANT(R8);
+  //JS_GL_CONSTANT(RG8);
+  //JS_GL_CONSTANT(R16F);
+  //JS_GL_CONSTANT(R32F);
+  //JS_GL_CONSTANT(RG16F);
+  //JS_GL_CONSTANT(RG32F);
+  JS_GL_CONSTANT(R8I);
+  //JS_GL_CONSTANT(R8UI);
+  JS_GL_CONSTANT(R16I);
+  JS_GL_CONSTANT(R16UI);
+  JS_GL_CONSTANT(R32I);
+  JS_GL_CONSTANT(R32UI);
+  JS_GL_CONSTANT(RG8I);
+  //JS_GL_CONSTANT(RG8UI);
+  JS_GL_CONSTANT(RG16I);
+  //JS_GL_CONSTANT(RG16UI);
+  JS_GL_CONSTANT(RG32I);
+  //JS_GL_CONSTANT(RG32UI);
+  //JS_GL_CONSTANT(VERTEX_ARRAY_BINDING);
+  JS_GL_CONSTANT(R8_SNORM);
+  JS_GL_CONSTANT(RG8_SNORM);
+  JS_GL_CONSTANT(RGB8_SNORM);
+  JS_GL_CONSTANT(RGBA8_SNORM);
+  JS_GL_CONSTANT(SIGNED_NORMALIZED);
+  //JS_GL_CONSTANT(COPY_READ_BUFFER);
+  //JS_GL_CONSTANT(COPY_WRITE_BUFFER);
+  JS_GL_CONSTANT(COPY_READ_BUFFER_BINDING); /* Same as COPY_READ_BUFFER */
+  JS_GL_CONSTANT(COPY_WRITE_BUFFER_BINDING); /* Same as COPY_WRITE_BUFFER */
+  //JS_GL_CONSTANT(UNIFORM_BUFFER);
+  JS_GL_CONSTANT(UNIFORM_BUFFER_BINDING);
+  JS_GL_CONSTANT(UNIFORM_BUFFER_START);
+  JS_GL_CONSTANT(UNIFORM_BUFFER_SIZE);
+  JS_GL_CONSTANT(MAX_VERTEX_UNIFORM_BLOCKS);
+  JS_GL_CONSTANT(MAX_FRAGMENT_UNIFORM_BLOCKS);
+  JS_GL_CONSTANT(MAX_COMBINED_UNIFORM_BLOCKS);
+  JS_GL_CONSTANT(MAX_UNIFORM_BUFFER_BINDINGS);
+  JS_GL_CONSTANT(MAX_UNIFORM_BLOCK_SIZE);
+  JS_GL_CONSTANT(MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS);
+  JS_GL_CONSTANT(MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS);
+  JS_GL_CONSTANT(UNIFORM_BUFFER_OFFSET_ALIGNMENT);
+  JS_GL_CONSTANT(ACTIVE_UNIFORM_BLOCKS);
+  JS_GL_CONSTANT(UNIFORM_TYPE);
+  JS_GL_CONSTANT(UNIFORM_SIZE);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_INDEX);
+  JS_GL_CONSTANT(UNIFORM_OFFSET);
+  JS_GL_CONSTANT(UNIFORM_ARRAY_STRIDE);
+  JS_GL_CONSTANT(UNIFORM_MATRIX_STRIDE);
+  JS_GL_CONSTANT(UNIFORM_IS_ROW_MAJOR);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_BINDING);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_DATA_SIZE);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_ACTIVE_UNIFORMS);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER);
+  JS_GL_CONSTANT(UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER);
+  JS_GL_CONSTANT(INVALID_INDEX);
+  JS_GL_CONSTANT(MAX_VERTEX_OUTPUT_COMPONENTS);
+  JS_GL_CONSTANT(MAX_FRAGMENT_INPUT_COMPONENTS);
+  JS_GL_CONSTANT(MAX_SERVER_WAIT_TIMEOUT);
+  //JS_GL_CONSTANT(OBJECT_TYPE);
+  //JS_GL_CONSTANT(SYNC_CONDITION);
+  //JS_GL_CONSTANT(SYNC_STATUS);
+  //JS_GL_CONSTANT(SYNC_FLAGS);
+  //JS_GL_CONSTANT(SYNC_FENCE);
+  //JS_GL_CONSTANT(SYNC_GPU_COMMANDS_COMPLETE);
+  //JS_GL_CONSTANT(UNSIGNALED);
+  //JS_GL_CONSTANT(SIGNALED);
+  //JS_GL_CONSTANT(ALREADY_SIGNALED);
+  //JS_GL_CONSTANT(TIMEOUT_EXPIRED);
+  //JS_GL_CONSTANT(CONDITION_SATISFIED);
+  //JS_GL_CONSTANT(WAIT_FAILED);
+  //JS_GL_CONSTANT(SYNC_FLUSH_COMMANDS_BIT);
+  JS_GL_CONSTANT(VERTEX_ATTRIB_ARRAY_DIVISOR);
+  JS_GL_CONSTANT(ANY_SAMPLES_PASSED);
+  JS_GL_CONSTANT(ANY_SAMPLES_PASSED_CONSERVATIVE);
+  JS_GL_CONSTANT(SAMPLER_BINDING);
+  JS_GL_CONSTANT(RGB10_A2UI);
+  JS_GL_CONSTANT(INT_2_10_10_10_REV);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_PAUSED);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_ACTIVE);
+  JS_GL_CONSTANT(TRANSFORM_FEEDBACK_BINDING);
+  JS_GL_CONSTANT(TEXTURE_IMMUTABLE_FORMAT);
+  JS_GL_CONSTANT(MAX_ELEMENT_INDEX);
+  JS_GL_CONSTANT(TEXTURE_IMMUTABLE_LEVELS);
+
+  //const GLint64 TIMEOUT_IGNORED                              = -1;
+
+  /* WebGL-specific enums */
+  //JS_GL_SET_CONSTANT("MAX_CLIENT_WAIT_TIMEOUT_WEBGL", MAX_CLIENT_WAIT_TIMEOUT_WEBGL);
 }
 
 ViewportState::ViewportState(GLint x, GLint y, GLsizei w, GLsizei h, bool valid) : x(x), y(y), w(w), h(h), valid(valid) {}
@@ -745,6 +1019,7 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initial
   Nan::SetMethod(proto, "useProgram", glCallWrap<UseProgram>);
   Nan::SetMethod(proto, "createFramebuffer", glCallWrap<CreateFramebuffer>);
   Nan::SetMethod(proto, "bindFramebuffer", glCallWrap<BindFramebuffer>);
+  Nan::SetMethod(proto, "bindFramebufferRaw", glCallWrap<BindFramebufferRaw>);
   Nan::SetMethod(proto, "framebufferTexture2D", glCallWrap<FramebufferTexture2D>);
   Nan::SetMethod(proto, "blitFramebuffer", glCallWrap<BlitFramebuffer>);
   Nan::SetMethod(proto, "createBuffer", glCallWrap<CreateBuffer>);
@@ -785,42 +1060,42 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initial
   Nan::SetMethod(proto, "drawBuffers", glCallWrap<DrawBuffers>);
   Nan::SetMethod(proto, "drawBuffersWEBGL", glCallWrap<DrawBuffersWEBGL>);
 
-  Nan::SetMethod(proto, "blendColor", BlendColor);
-  Nan::SetMethod(proto, "blendEquationSeparate", BlendEquationSeparate);
-  Nan::SetMethod(proto, "blendFuncSeparate", BlendFuncSeparate);
-  Nan::SetMethod(proto, "clearStencil", ClearStencil);
-  Nan::SetMethod(proto, "colorMask", ColorMask);
-  Nan::SetMethod(proto, "copyTexImage2D", CopyTexImage2D);
-  Nan::SetMethod(proto, "copyTexSubImage2D", CopyTexSubImage2D);
-  Nan::SetMethod(proto, "cullFace", CullFace);
-  Nan::SetMethod(proto, "depthMask", DepthMask);
-  Nan::SetMethod(proto, "depthRange", DepthRange);
-  Nan::SetMethod(proto, "disableVertexAttribArray", DisableVertexAttribArray);
-  Nan::SetMethod(proto, "hint", Hint);
-  Nan::SetMethod(proto, "isEnabled", IsEnabled);
-  Nan::SetMethod(proto, "lineWidth", LineWidth);
-  Nan::SetMethod(proto, "polygonOffset", PolygonOffset);
+  Nan::SetMethod(proto, "blendColor", glCallWrap<BlendColor>);
+  Nan::SetMethod(proto, "blendEquationSeparate", glCallWrap<BlendEquationSeparate>);
+  Nan::SetMethod(proto, "blendFuncSeparate", glCallWrap<BlendFuncSeparate>);
+  Nan::SetMethod(proto, "clearStencil", glCallWrap<ClearStencil>);
+  Nan::SetMethod(proto, "colorMask", glCallWrap<ColorMask>);
+  Nan::SetMethod(proto, "copyTexImage2D", glCallWrap<CopyTexImage2D>);
+  Nan::SetMethod(proto, "copyTexSubImage2D", glCallWrap<CopyTexSubImage2D>);
+  Nan::SetMethod(proto, "cullFace", glCallWrap<CullFace>);
+  Nan::SetMethod(proto, "depthMask", glCallWrap<DepthMask>);
+  Nan::SetMethod(proto, "depthRange", glCallWrap<DepthRange>);
+  Nan::SetMethod(proto, "disableVertexAttribArray", glCallWrap<DisableVertexAttribArray>);
+  Nan::SetMethod(proto, "hint", glCallWrap<Hint>);
+  Nan::SetMethod(proto, "isEnabled", glCallWrap<IsEnabled>);
+  Nan::SetMethod(proto, "lineWidth", glCallWrap<LineWidth>);
+  Nan::SetMethod(proto, "polygonOffset", glCallWrap<PolygonOffset>);
 
-  Nan::SetMethod(proto, "scissor", Scissor);
-  Nan::SetMethod(proto, "stencilFunc", StencilFunc);
-  Nan::SetMethod(proto, "stencilFuncSeparate", StencilFuncSeparate);
-  Nan::SetMethod(proto, "stencilMask", StencilMask);
-  Nan::SetMethod(proto, "stencilMaskSeparate", StencilMaskSeparate);
-  Nan::SetMethod(proto, "stencilOp", StencilOp);
-  Nan::SetMethod(proto, "stencilOpSeparate", StencilOpSeparate);
-  Nan::SetMethod(proto, "bindRenderbuffer", BindRenderbuffer);
-  Nan::SetMethod(proto, "createRenderbuffer", CreateRenderbuffer);
+  Nan::SetMethod(proto, "scissor", glCallWrap<Scissor>);
+  Nan::SetMethod(proto, "stencilFunc", glCallWrap<StencilFunc>);
+  Nan::SetMethod(proto, "stencilFuncSeparate", glCallWrap<StencilFuncSeparate>);
+  Nan::SetMethod(proto, "stencilMask", glCallWrap<StencilMask>);
+  Nan::SetMethod(proto, "stencilMaskSeparate", glCallWrap<StencilMaskSeparate>);
+  Nan::SetMethod(proto, "stencilOp", glCallWrap<StencilOp>);
+  Nan::SetMethod(proto, "stencilOpSeparate", glCallWrap<StencilOpSeparate>);
+  Nan::SetMethod(proto, "bindRenderbuffer", glCallWrap<BindRenderbuffer>);
+  Nan::SetMethod(proto, "createRenderbuffer", glCallWrap<CreateRenderbuffer>);
 
-  Nan::SetMethod(proto, "deleteBuffer", DeleteBuffer);
-  Nan::SetMethod(proto, "deleteFramebuffer", DeleteFramebuffer);
-  Nan::SetMethod(proto, "deleteProgram", DeleteProgram);
-  Nan::SetMethod(proto, "deleteRenderbuffer", DeleteRenderbuffer);
-  Nan::SetMethod(proto, "deleteShader", DeleteShader);
-  Nan::SetMethod(proto, "deleteTexture", DeleteTexture);
-  Nan::SetMethod(proto, "detachShader", DetachShader);
-  Nan::SetMethod(proto, "framebufferRenderbuffer", FramebufferRenderbuffer);
-  Nan::SetMethod(proto, "getVertexAttribOffset", GetVertexAttribOffset);
-  Nan::SetMethod(proto, "getShaderPrecisionFormat", GetShaderPrecisionFormat);
+  Nan::SetMethod(proto, "deleteBuffer", glCallWrap<DeleteBuffer>);
+  Nan::SetMethod(proto, "deleteFramebuffer", glCallWrap<DeleteFramebuffer>);
+  Nan::SetMethod(proto, "deleteProgram", glCallWrap<DeleteProgram>);
+  Nan::SetMethod(proto, "deleteRenderbuffer", glCallWrap<DeleteRenderbuffer>);
+  Nan::SetMethod(proto, "deleteShader", glCallWrap<DeleteShader>);
+  Nan::SetMethod(proto, "deleteTexture", glCallWrap<DeleteTexture>);
+  Nan::SetMethod(proto, "detachShader", glCallWrap<DetachShader>);
+  Nan::SetMethod(proto, "framebufferRenderbuffer", glCallWrap<FramebufferRenderbuffer>);
+  Nan::SetMethod(proto, "getVertexAttribOffset", glCallWrap<GetVertexAttribOffset>);
+  Nan::SetMethod(proto, "getShaderPrecisionFormat", glCallWrap<GetShaderPrecisionFormat>);
 
   Nan::SetMethod(proto, "isBuffer", glCallWrap<IsBuffer>);
   Nan::SetMethod(proto, "isFramebuffer", glCallWrap<IsFramebuffer>);
@@ -852,6 +1127,8 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initial
   Nan::SetMethod(proto, "getShaderPrecisionFormat", glCallWrap<GetShaderPrecisionFormat>);
   Nan::SetMethod(proto, "getSupportedExtensions", glCallWrap<GetSupportedExtensions>);
   Nan::SetMethod(proto, "getExtension", glCallWrap<GetExtension>);
+  Nan::SetMethod(proto, "getContextAttributes", glCallWrap<GetContextAttributes>);
+
   Nan::SetMethod(proto, "checkFramebufferStatus", glCallWrap<CheckFramebufferStatus>);
 
   Nan::SetMethod(proto, "createVertexArray", glCallWrap<CreateVertexArray>);
@@ -868,15 +1145,18 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initial
 
   Nan::SetMethod(proto, "isContextLost", glCallWrap<IsContextLost>);
 
-  Nan::SetAccessor(proto, JS_STR("drawingBufferWidth"), DrawingBufferWidthGetter);
-  Nan::SetAccessor(proto, JS_STR("drawingBufferHeight"), DrawingBufferHeightGetter);
+  Nan::SetAccessor(proto, JS_STR("drawingBufferWidth"), glGetterWrap<DrawingBufferWidthGetter>);
+  Nan::SetAccessor(proto, JS_STR("drawingBufferHeight"), glGetterWrap<DrawingBufferHeightGetter>);
 
-  Nan::SetMethod(proto, "setDefaultFramebuffer", glSwitchCallWrap<SetDefaultFramebuffer>);
+  /* Nan::SetMethod(proto, "getFramebuffer", glSwitchCallWrap<GetFramebuffer>);
+  Nan::SetMethod(proto, "setDefaultFramebuffer", glSwitchCallWrap<SetDefaultFramebuffer>); */
+  Nan::SetMethod(proto, "getFramebuffer", glCallWrap<GetFramebuffer>);
+  Nan::SetMethod(proto, "setDefaultFramebuffer", glCallWrap<SetDefaultFramebuffer>);
 
   setGlConstants(proto);
 
   // ctor
-  Local<Function> ctorFn = ctor->GetFunction();
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
   setGlConstants(ctorFn);
 
   return std::pair<Local<Object>, Local<FunctionTemplate>>(ctorFn, ctor);
@@ -888,7 +1168,7 @@ WebGLRenderingContext::WebGLRenderingContext() :
   defaultVao(0),
   dirty(false),
   defaultFramebuffer(0),
-  flipY(true),
+  flipY(false),
   premultiplyAlpha(true),
   packAlignment(4),
   unpackAlignment(4),
@@ -930,7 +1210,7 @@ NAN_METHOD(WebGLRenderingContext::SetWindowHandle) {
 
 NAN_METHOD(WebGLRenderingContext::SetDefaultVao) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  gl->defaultVao = info[0]->Uint32Value();
+  gl->defaultVao = TO_UINT32(info[0]);
 }
 
 NAN_METHOD(WebGLRenderingContext::IsDirty) {
@@ -972,19 +1252,38 @@ inline Type* getArrayData(Local<Value> arg, int* num = NULL) {
   return data;
 }
 
-inline void *getImageData(Local<Value> arg, int *num = nullptr) {
+inline GLuint getImageTexture(Local<Value> arg) {
+  GLuint tex = 0;
+
+  if (arg->IsObject()) {
+    Local<String> textureString = String::NewFromUtf8(Isolate::GetCurrent(), "texture", NewStringType::kInternalized).ToLocalChecked();
+    Local<Value> textureVal = Local<Object>::Cast(arg)->Get(textureString);
+
+    if (textureVal->IsObject()) {
+      Local<String> idString = String::NewFromUtf8(Isolate::GetCurrent(), "id", NewStringType::kInternalized).ToLocalChecked();
+      Local<Value> idVal = Local<Object>::Cast(textureVal)->Get(idString);
+
+      if (idVal->IsNumber()) {
+        tex = TO_UINT32(idVal);
+      }
+    }
+  }
+  return tex;
+}
+
+inline void *getImageData(Local<Value> arg) {
   void *pixels = nullptr;
 
   if (!arg->IsNull()) {
     Local<Object> obj = Local<Object>::Cast(arg);
     if (obj->IsObject()) {
       if (obj->IsArrayBufferView()) {
-        pixels = getArrayData<unsigned char>(obj, num);
+        pixels = getArrayData<unsigned char>(obj);
       } else {
         Local<String> dataString = String::NewFromUtf8(Isolate::GetCurrent(), "data", NewStringType::kInternalized).ToLocalChecked();
-        if (obj->Has(dataString)) {
+        if (Nan::Has(obj, dataString).FromJust()) {
           Local<Value> data = obj->Get(dataString);
-          pixels = getArrayData<unsigned char>(data, num);
+          pixels = getArrayData<unsigned char>(data);
         } else {
           Nan::ThrowError("Bad texture argument");
           // pixels = node::Buffer::Data(Nan::Get(obj, JS_STR("data")).ToLocalChecked());
@@ -1054,8 +1353,8 @@ void expandLuminanceAlpha(char *dstData, char *srcData, size_t width, size_t hei
 
 NAN_METHOD(WebGLRenderingContext::Uniform1f) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    float x = (float)info[1]->NumberValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    float x = TO_FLOAT(info[1]);
 
     glUniform1f(location, x);
   }
@@ -1063,9 +1362,9 @@ NAN_METHOD(WebGLRenderingContext::Uniform1f) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2f) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    float x = (float)info[1]->NumberValue();
-    float y = (float)info[2]->NumberValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    float x = TO_FLOAT(info[1]);
+    float y = TO_FLOAT(info[2]);
 
     glUniform2f(location, x, y);
   }
@@ -1073,10 +1372,10 @@ NAN_METHOD(WebGLRenderingContext::Uniform2f) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3f) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    float x = (float)info[1]->NumberValue();
-    float y = (float)info[2]->NumberValue();
-    float z = (float)info[3]->NumberValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    float x = TO_FLOAT(info[1]);
+    float y = TO_FLOAT(info[2]);
+    float z = TO_FLOAT(info[3]);
 
     glUniform3f(location, x, y, z);
   }
@@ -1084,11 +1383,11 @@ NAN_METHOD(WebGLRenderingContext::Uniform3f) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4f) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    float x = (float)info[1]->NumberValue();
-    float y = (float)info[2]->NumberValue();
-    float z = (float)info[3]->NumberValue();
-    float w = (float)info[4]->NumberValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    float x = TO_FLOAT(info[1]);
+    float y = TO_FLOAT(info[2]);
+    float z = TO_FLOAT(info[3]);
+    float w = TO_FLOAT(info[4]);
 
     glUniform4f(location, x, y, z, w);
   }
@@ -1096,8 +1395,8 @@ NAN_METHOD(WebGLRenderingContext::Uniform4f) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform1i) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLint x = info[1]->Int32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLint x = TO_INT32(info[1]);
 
     glUniform1i(location, x);
   }
@@ -1105,9 +1404,9 @@ NAN_METHOD(WebGLRenderingContext::Uniform1i) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2i) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLint x = info[1]->Int32Value();
-    GLint y = info[2]->Int32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLint x = TO_INT32(info[1]);
+    GLint y = TO_INT32(info[2]);
 
     glUniform2i(location, x, y);
   }
@@ -1115,10 +1414,10 @@ NAN_METHOD(WebGLRenderingContext::Uniform2i) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3i) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLint x = info[1]->Int32Value();
-    GLint y = info[2]->Int32Value();
-    GLint z = info[3]->Int32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLint x = TO_INT32(info[1]);
+    GLint y = TO_INT32(info[2]);
+    GLint z = TO_INT32(info[3]);
 
     glUniform3i(location, x, y, z);
   }
@@ -1126,11 +1425,11 @@ NAN_METHOD(WebGLRenderingContext::Uniform3i) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4i) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLint x = info[1]->Int32Value();
-    GLint y = info[2]->Int32Value();
-    GLint z = info[3]->Int32Value();
-    GLint w = info[4]->Int32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLint x = TO_INT32(info[1]);
+    GLint y = TO_INT32(info[2]);
+    GLint z = TO_INT32(info[3]);
+    GLint w = TO_INT32(info[4]);
 
     glUniform4i(location, x, y, z, w);
   }
@@ -1138,8 +1437,8 @@ NAN_METHOD(WebGLRenderingContext::Uniform4i) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform1ui) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLuint x = info[1]->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLuint x = TO_UINT32(info[1]);
 
     glUniform1ui(location, x);
   }
@@ -1147,9 +1446,9 @@ NAN_METHOD(WebGLRenderingContext::Uniform1ui) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2ui) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLuint x = info[1]->Uint32Value();
-    GLuint y = info[2]->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLuint x = TO_UINT32(info[1]);
+    GLuint y = TO_UINT32(info[2]);
 
     glUniform2ui(location, x, y);
   }
@@ -1157,10 +1456,10 @@ NAN_METHOD(WebGLRenderingContext::Uniform2ui) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3ui) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLuint x = info[1]->Uint32Value();
-    GLuint y = info[2]->Uint32Value();
-    GLuint z = info[3]->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLuint x = TO_UINT32(info[1]);
+    GLuint y = TO_UINT32(info[2]);
+    GLuint z = TO_UINT32(info[3]);
 
     glUniform3ui(location, x, y, z);
   }
@@ -1168,11 +1467,11 @@ NAN_METHOD(WebGLRenderingContext::Uniform3ui) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4ui) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLuint x = info[1]->Uint32Value();
-    GLuint y = info[2]->Uint32Value();
-    GLuint z = info[3]->Uint32Value();
-    GLuint w = info[4]->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLuint x = TO_UINT32(info[1]);
+    GLuint y = TO_UINT32(info[2]);
+    GLuint z = TO_UINT32(info[3]);
+    GLuint w = TO_UINT32(info[4]);
 
     glUniform4ui(location, x, y, z, w);
   }
@@ -1180,7 +1479,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform4ui) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform1fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLfloat *data;
     int count;
@@ -1196,12 +1495,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1fv) {
       data = getArrayData<GLfloat>(info[1], &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1211,7 +1510,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform1fv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLfloat *data;
     int count;
@@ -1229,12 +1528,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform2fv) {
       count /= 2;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1244,7 +1543,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform2fv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLfloat *data;
     int count;
@@ -1262,12 +1561,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform3fv) {
       count /= 3;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1277,7 +1576,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform3fv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLfloat *data;
     int count;
@@ -1295,12 +1594,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform4fv) {
       count /= 4;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1310,7 +1609,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform4fv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform1iv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLint *data;
     int count;
@@ -1326,12 +1625,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1iv) {
       data = getArrayData<GLint>(info[1], &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1341,7 +1640,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform1iv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2iv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLint *data;
     int count;
@@ -1359,12 +1658,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform2iv) {
       count /= 2;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1374,7 +1673,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform2iv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3iv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLint *data;
     int count;
@@ -1392,12 +1691,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform3iv) {
       count /= 3;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1407,7 +1706,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform3iv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4iv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
     GLint *data;
     int count;
@@ -1425,12 +1724,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform4iv) {
       count /= 4;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1440,7 +1739,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform4iv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform1uiv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
     Local<Value> dataValue = info[1];
 
     GLuint *data;
@@ -1457,12 +1756,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1uiv) {
       data = getArrayData<GLuint>(dataValue, &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1472,7 +1771,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform1uiv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform2uiv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
     Local<Value> dataValue = info[1];
 
     GLuint *data;
@@ -1489,12 +1788,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform2uiv) {
       data = getArrayData<GLuint>(dataValue, &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1504,7 +1803,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform2uiv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform3uiv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
     Local<Value> dataValue = info[1];
 
     GLuint *data;
@@ -1521,12 +1820,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform3uiv) {
       data = getArrayData<GLuint>(dataValue, &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1536,7 +1836,7 @@ NAN_METHOD(WebGLRenderingContext::Uniform3uiv) {
 
 NAN_METHOD(WebGLRenderingContext::Uniform4uiv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
     Local<Value> dataValue = info[1];
 
     GLuint *data;
@@ -1553,12 +1853,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform4uiv) {
       data = getArrayData<GLuint>(dataValue, &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1568,8 +1868,8 @@ NAN_METHOD(WebGLRenderingContext::Uniform4uiv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix2fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLboolean transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLboolean transpose = TO_BOOL(info[1]);
 
     GLfloat *data;
     int count;
@@ -1585,12 +1885,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2fv) {
       data = getArrayData<GLfloat>(info[2], &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1607,8 +1907,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix3fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLboolean transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLboolean transpose = TO_BOOL(info[1]);
 
     GLfloat *data;
     int count;
@@ -1624,12 +1924,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3fv) {
       data = getArrayData<GLfloat>(info[2], &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1644,8 +1944,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix4fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    GLboolean transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    GLboolean transpose = TO_BOOL(info[1]);
 
     GLfloat *data;
     int count;
@@ -1661,12 +1961,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4fv) {
       data = getArrayData<GLfloat>(info[2], &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1681,8 +1981,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix3x2fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1699,12 +1999,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x2fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1719,8 +2019,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x2fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix4x2fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1737,12 +2037,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x2fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1757,8 +2057,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x2fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix2x3fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1775,12 +2075,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x3fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1795,8 +2095,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x3fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix4x3fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1813,12 +2113,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x3fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1833,8 +2133,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x3fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix2x4fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1851,12 +2151,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x4fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1871,8 +2171,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x4fv) {
 
 NAN_METHOD(WebGLRenderingContext::UniformMatrix3x4fv) {
   if (info[0]->IsObject()) {
-    GLuint location = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-    bool transpose = info[1]->BooleanValue();
+    GLuint location = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+    bool transpose = TO_BOOL(info[1]);
     Local<Value> dataValue = info[2];
 
     GLfloat *data;
@@ -1889,12 +2189,12 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x4fv) {
       data = getArrayData<GLfloat>(dataValue, &count);
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcOffset = info[3]->Uint32Value();
+      GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[4]->IsNumber()) {
-      GLsizei srcLength = info[4]->Uint32Value();
+      GLsizei srcLength = TO_UINT32(info[4]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1908,8 +2208,8 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x4fv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::PixelStorei) {
-  int pname = info[0]->Int32Value();
-  int param = info[1]->Int32Value();
+  int pname = TO_INT32(info[0]);
+  int param = TO_INT32(info[1]);
 
   if (pname == UNPACK_FLIP_Y_WEBGL) {
     WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
@@ -1933,9 +2233,9 @@ NAN_METHOD(WebGLRenderingContext::PixelStorei) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BindAttribLocation) {
-  GLuint programId = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-  int index = info[1]->Int32Value();
-  String::Utf8Value name(info[2]);
+  GLuint programId = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  int index = TO_INT32(info[1]);
+  Nan::Utf8String name(Local<String>::Cast(info[2]));
 
   glBindAttribLocation(programId, index, *name);
 
@@ -1951,9 +2251,9 @@ NAN_METHOD(WebGLRenderingContext::GetError) {
 
 NAN_METHOD(WebGLRenderingContext::DrawArrays) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  int mode = info[0]->Int32Value();
-  int first = info[1]->Int32Value();
-  int count = info[2]->Int32Value();
+  int mode = TO_INT32(info[0]);
+  int first = TO_INT32(info[1]);
+  int count = TO_INT32(info[2]);
 
   glDrawArrays(mode, first, count);
 
@@ -1964,10 +2264,10 @@ NAN_METHOD(WebGLRenderingContext::DrawArrays) {
 
 NAN_METHOD(WebGLRenderingContext::DrawArraysInstanced) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  int mode = info[0]->Int32Value();
-  int first = info[1]->Int32Value();
-  int count = info[2]->Int32Value();
-  int primcount = info[3]->Int32Value();
+  int mode = TO_INT32(info[0]);
+  int first = TO_INT32(info[1]);
+  int count = TO_INT32(info[2]);
+  int primcount = TO_INT32(info[3]);
 
   glDrawArraysInstanced(mode, first, count, primcount);
 
@@ -1979,10 +2279,10 @@ NAN_METHOD(WebGLRenderingContext::DrawArraysInstanced) {
 NAN_METHOD(WebGLRenderingContext::DrawArraysInstancedANGLE) {
   Local<Object> contextObj = Local<Object>::Cast(info.This()->Get(JS_STR("context")));
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(contextObj);
-  int mode = info[0]->Int32Value();
-  int first = info[1]->Int32Value();
-  int count = info[2]->Int32Value();
-  int primcount = info[3]->Int32Value();
+  int mode = TO_INT32(info[0]);
+  int first = TO_INT32(info[1]);
+  int count = TO_INT32(info[2]);
+  int primcount = TO_INT32(info[3]);
 
   glDrawArraysInstanced(mode, first, count, primcount);
 
@@ -1992,15 +2292,15 @@ NAN_METHOD(WebGLRenderingContext::DrawArraysInstancedANGLE) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GenerateMipmap) {
-  GLint target = info[0]->Int32Value();
+  GLint target = TO_INT32(info[0]);
   glGenerateMipmap(target);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::GetAttribLocation) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  String::Utf8Value name(info[1]);
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Nan::Utf8String name(Local<String>::Cast(info[1]));
 
   GLint result = glGetAttribLocation(programId, *name);
 
@@ -2009,7 +2309,7 @@ NAN_METHOD(WebGLRenderingContext::GetAttribLocation) {
 
 
 NAN_METHOD(WebGLRenderingContext::DepthFunc) {
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
   glDepthFunc(arg);
 
   // info.GetReturnValue().Set(Nan::Undefined());
@@ -2019,10 +2319,10 @@ NAN_METHOD(WebGLRenderingContext::DepthFunc) {
 NAN_METHOD(WebGLRenderingContext::Viewport) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
-  GLint x = info[0]->Int32Value();
-  GLint y = info[1]->Int32Value();
-  GLsizei width = info[2]->Int32Value();
-  GLsizei height = info[3]->Int32Value();
+  GLint x = TO_INT32(info[0]);
+  GLint y = TO_INT32(info[1]);
+  GLsizei width = TO_INT32(info[2]);
+  GLsizei height = TO_INT32(info[3]);
 
   glViewport(x, y, width, height);
 
@@ -2032,7 +2332,7 @@ NAN_METHOD(WebGLRenderingContext::Viewport) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CreateShader) {
-  GLint type = info[0]->Int32Value();
+  GLint type = TO_INT32(info[0]);
 
   GLuint shaderId = glCreateShader(type);
   Local<Object> shaderObject = Nan::New<Object>();
@@ -2043,8 +2343,8 @@ NAN_METHOD(WebGLRenderingContext::CreateShader) {
 
 
 NAN_METHOD(WebGLRenderingContext::ShaderSource) {
-  GLint shaderId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  String::Utf8Value code(info[1]);
+  GLint shaderId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Nan::Utf8String code(Local<String>::Cast(info[1]));
   GLint length = code.length();
 
   const char* codes[] = {*code};
@@ -2056,14 +2356,14 @@ NAN_METHOD(WebGLRenderingContext::ShaderSource) {
 
 
 NAN_METHOD(WebGLRenderingContext::CompileShader) {
-  GLint shaderId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
+  GLint shaderId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   glCompileShader(shaderId);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::FrontFace) {
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
   glFrontFace(arg);
 
   // info.GetReturnValue().Set(Nan::Undefined());
@@ -2074,32 +2374,46 @@ NAN_METHOD(WebGLRenderingContext::IsContextLost) {
 }
 
 NAN_GETTER(WebGLRenderingContext::DrawingBufferWidthGetter) {
-  Nan::HandleScope scope;
+  // Nan::HandleScope scope;
 
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
 
   int width, height;
-  windowsystem::GetWindowSize(gl->windowHandle, &width, &height);
+  windowsystem::GetFramebufferSize(gl->windowHandle, &width, &height);
 
   info.GetReturnValue().Set(JS_INT(width));
 }
 
 NAN_GETTER(WebGLRenderingContext::DrawingBufferHeightGetter) {
-  Nan::HandleScope scope;
+  // Nan::HandleScope scope;
 
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
 
   int width, height;
-  windowsystem::GetWindowSize(gl->windowHandle, &width, &height);
+  windowsystem::GetFramebufferSize(gl->windowHandle, &width, &height);
 
   info.GetReturnValue().Set(JS_INT(height));
 }
 
+NAN_METHOD(WebGLRenderingContext::GetFramebuffer) {
+  Local<Object> glObj = info.This();
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
+
+  GLuint target = TO_UINT32(info[0]);
+  if (gl->HasFramebufferBinding(target)) {
+    Local<Object> fboObject = Nan::New<Object>();
+    fboObject->Set(JS_STR("id"), JS_INT(gl->GetFramebufferBinding(target)));
+    info.GetReturnValue().Set(fboObject);
+  } else {
+    info.GetReturnValue().Set(Nan::Null());
+  }
+}
+
 NAN_METHOD(WebGLRenderingContext::SetDefaultFramebuffer) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLuint framebuffer = info[0]->Uint32Value();
+  GLuint framebuffer = TO_UINT32(info[0]);
 
   GLuint oldDefaultFramebuffer = gl->defaultFramebuffer;
   GLuint oldFramebuffer = gl->HasFramebufferBinding(GL_FRAMEBUFFER) ? gl->GetFramebufferBinding(GL_FRAMEBUFFER) : 0;
@@ -2122,8 +2436,8 @@ NAN_METHOD(WebGLRenderingContext::SetDefaultFramebuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderParameter) {
-  GLint shaderId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  GLint pname = info[1]->Int32Value();
+  GLint shaderId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLint pname = TO_INT32(info[1]);
   int value;
   switch (pname) {
     case GL_DELETE_STATUS:
@@ -2148,7 +2462,7 @@ NAN_METHOD(WebGLRenderingContext::GetShaderParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderInfoLog) {
-  GLint shaderId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
+  GLint shaderId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   char Error[1024];
   int Len;
 
@@ -2168,22 +2482,22 @@ NAN_METHOD(WebGLRenderingContext::CreateProgram) {
 
 
 NAN_METHOD(WebGLRenderingContext::AttachShader) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  GLint shaderId = info[1]->ToObject()->Get(JS_STR("id"))->Int32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLint shaderId = TO_INT32(JS_OBJ(info[1])->Get(JS_STR("id")));
 
   glAttachShader(programId, shaderId);
 }
 
 
 NAN_METHOD(WebGLRenderingContext::LinkProgram) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   glLinkProgram(programId);
 }
 
 
 NAN_METHOD(WebGLRenderingContext::GetProgramParameter) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  int pname = info[1]->Int32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  int pname = TO_INT32(info[1]);
   int value;
 
   switch (pname) {
@@ -2206,8 +2520,8 @@ NAN_METHOD(WebGLRenderingContext::GetProgramParameter) {
 
 
 NAN_METHOD(WebGLRenderingContext::GetUniformLocation) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  v8::String::Utf8Value name(info[1]);
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Nan::Utf8String name(Local<String>::Cast(info[1]));
 
   GLint location = glGetUniformLocation(programId, *name);
 
@@ -2221,8 +2535,8 @@ NAN_METHOD(WebGLRenderingContext::GetUniformLocation) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetUniformBlockIndex) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  v8::String::Utf8Value uniformBlockName(info[1]);
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Nan::Utf8String uniformBlockName(Local<String>::Cast(info[1]));
 
   GLint blockIndex = glGetUniformBlockIndex(programId, *uniformBlockName);
 
@@ -2230,18 +2544,18 @@ NAN_METHOD(WebGLRenderingContext::GetUniformBlockIndex) {
 }
 
 NAN_METHOD(WebGLRenderingContext::UniformBlockBinding) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  GLuint uniformBlockIndex = info[1]->Uint32Value();
-  GLuint uniformBlockBinding = info[2]->Uint32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint uniformBlockIndex = TO_UINT32(info[1]);
+  GLuint uniformBlockBinding = TO_UINT32(info[2]);
 
   glUniformBlockBinding(programId, uniformBlockIndex, uniformBlockBinding);
 }
 
 NAN_METHOD(WebGLRenderingContext::ClearColor) {
-  float red = (float)info[0]->NumberValue();
-  float green = (float)info[1]->NumberValue();
-  float blue = (float)info[2]->NumberValue();
-  float alpha = (float)info[3]->NumberValue();
+  GLfloat red = TO_FLOAT(info[0]);
+  GLfloat green = TO_FLOAT(info[1]);
+  GLfloat blue = TO_FLOAT(info[2]);
+  GLfloat alpha = TO_FLOAT(info[3]);
 
   glClearColor(red, green, blue, alpha);
 
@@ -2250,21 +2564,21 @@ NAN_METHOD(WebGLRenderingContext::ClearColor) {
 
 
 NAN_METHOD(WebGLRenderingContext::ClearDepth) {
-  GLfloat depth = info[0]->NumberValue();
+  GLfloat depth = TO_FLOAT(info[0]);
   glClearDepthf(depth);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::Disable) {
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
   glDisable(arg);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::Enable) {
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
   glEnable(arg);
 
   // info.GetReturnValue().Set(Nan::Undefined());
@@ -2285,8 +2599,8 @@ NAN_METHOD(WebGLRenderingContext::BindTexture) {
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
 
-  GLenum target = info[0]->Int32Value();
-  GLuint texture = info[1]->IsObject() ? info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLenum target = TO_INT32(info[0]);
+  GLuint texture = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
 
   glBindTexture(target, texture);
 
@@ -2448,7 +2762,7 @@ int getImageFormat(Local<Value> arg) {
   if (arg->IsArrayBufferView()) {
     return -1;
   } else {
-    Local<Value> constructorName = arg->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"));
+    Local<Value> constructorName = JS_OBJ(JS_OBJ(arg)->Get(JS_STR("constructor")))->Get(JS_STR("name"));
     if (
       constructorName->StrictEquals(JS_STR("HTMLImageElement")) ||
       constructorName->StrictEquals(JS_STR("HTMLVideoElement")) ||
@@ -2511,8 +2825,8 @@ NAN_METHOD(WebGLRenderingContext::TexImage2D) {
       } */
       type=height;
       format=width;
-      width = border->BooleanValue() ? border->ToObject()->Get(widthString) : Number::New(isolate, 1).As<Value>();
-      height = border->BooleanValue() ? border->ToObject()->Get(heightString) : Number::New(isolate, 1).As<Value>();
+      width = TO_BOOL(border) ? JS_OBJ(border)->Get(widthString) : Number::New(isolate, 1).As<Value>();
+      height = TO_BOOL(border) ? JS_OBJ(border)->Get(heightString) : Number::New(isolate, 1).As<Value>();
       // return _texImage2D(target, level, internalformat, width, height, 0, format, type, pixels);
     } else {
       /* LOGI("Loaded string asset %d %d %d %d %d %d %d %d %d",
@@ -2567,7 +2881,7 @@ NAN_METHOD(WebGLRenderingContext::TexImage2D) {
     ) {
       if (pixels->IsArrayBufferView() && !srcOffsetNumber.IsEmpty()) {
         Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
-        size_t srcOffsetInt = srcOffset->Uint32Value();
+        size_t srcOffsetInt = TO_UINT32(srcOffset);
         size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
         size_t extraOffset = srcOffsetInt * elementSize;
         pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
@@ -2586,25 +2900,68 @@ NAN_METHOD(WebGLRenderingContext::TexImage2D) {
     return;
   }
 
-  GLenum targetV = target->Uint32Value();
-  GLenum levelV = level->Uint32Value();
-  GLenum internalformatV = internalformat->Uint32Value();
-  GLsizei widthV = width->Uint32Value();
-  GLsizei heightV = height->Uint32Value();
-  GLint borderV = border->Int32Value();
-  GLenum formatV = format->Uint32Value();
-  GLenum typeV = type->Uint32Value();
+  GLenum targetV = TO_UINT32(target);
+  GLenum levelV = TO_UINT32(level);
+  GLenum internalformatV = TO_UINT32(internalformat);
+  GLsizei widthV = TO_UINT32(width);
+  GLsizei heightV = TO_UINT32(height);
+  GLint borderV = TO_INT32(border);
+  GLenum formatV = TO_UINT32(format);
+  GLenum typeV = TO_UINT32(type);
 
   internalformatV = normalizeInternalFormat(internalformatV, formatV, typeV);
 
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
+  GLuint texV;
   char *pixelsV;
   if (pixels->IsNull()) {
-    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, nullptr);
+    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, NULL);
   } else if (pixels->IsNumber()) {
-    GLintptr offsetV = pixels->Uint32Value();
+    GLintptr offsetV = TO_UINT32(pixels);
     glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, (void *)offsetV);
+  } else if ((texV = getImageTexture(pixels)) != 0) {
+    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, NULL);
+
+    GLuint fbos[2];
+    glGenFramebuffers(2, fbos);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
+
+    if (gl->flipY) {
+      glBlitFramebuffer(
+        0, 0, widthV, heightV,
+        0, 0, widthV, heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    } else {
+      glBlitFramebuffer(
+        0, heightV, widthV, 0,
+        0, 0, widthV, heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    }
+
+    // glCopyTexImage2D(targetV, levelV, internalformatV, 0, 0, widthV, heightV, 0);
+
+    glDeleteFramebuffers(2, fbos);
+
+    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
   } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
     size_t formatSize = getFormatSize(formatV);
     size_t typeSize = getTypeSize(typeV);
@@ -2625,7 +2982,7 @@ NAN_METHOD(WebGLRenderingContext::TexImage2D) {
       pixelsV2 = pixelsV;
     }
 
-    if (canvas::ImageData::getFlip() && gl->flipY && !pixels->IsArrayBufferView()) {
+    if (gl->flipY && !pixels->IsArrayBufferView()) {
       unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
 
       flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
@@ -2680,7 +3037,7 @@ NAN_METHOD(WebGLRenderingContext::TexImage2D) {
       glPixelStorei(GL_UNPACK_ALIGNMENT, gl->unpackAlignment);
     }
   } else {
-    Nan::ThrowError(String::Concat(JS_STR("Invalid texture argument: "), pixels->ToString()));
+    Nan::ThrowError("WebGLRenderingContext::TexImage2D: invalid texture argument");
   }
 }
 
@@ -2709,12 +3066,12 @@ NAN_METHOD(WebGLRenderingContext::CompressedTexImage2D) {
     Local<Value> height = info[4];
     Local<Value> border = info[5];
 
-    int targetV = target->Int32Value();
-    int levelV = level->Int32Value();
-    int internalformatV = internalformat->Int32Value();
-    int widthV = width->Int32Value();
-    int heightV = height->Int32Value();
-    int borderV = border->Int32Value();
+    int targetV = TO_INT32(target);
+    int levelV = TO_INT32(level);
+    int internalformatV = TO_INT32(internalformat);
+    int widthV = TO_INT32(width);
+    int heightV = TO_INT32(height);
+    int borderV = TO_INT32(border);
 
     glCompressedTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, dataLengthV, dataV);
   } else {
@@ -2723,9 +3080,9 @@ NAN_METHOD(WebGLRenderingContext::CompressedTexImage2D) {
 }
 
 NAN_METHOD(WebGLRenderingContext::TexParameteri) {
-  int target = info[0]->Int32Value();
-  int pname = info[1]->Int32Value();
-  int param = info[2]->Int32Value();
+  int target = TO_INT32(info[0]);
+  int pname = TO_INT32(info[1]);
+  int param = TO_INT32(info[2]);
 
   glTexParameteri(target, pname, param);
 
@@ -2733,9 +3090,9 @@ NAN_METHOD(WebGLRenderingContext::TexParameteri) {
 }
 
 NAN_METHOD(WebGLRenderingContext::TexParameterf) {
-  int target = info[0]->Int32Value();
-  int pname = info[1]->Int32Value();
-  float param = (float) info[2]->NumberValue();
+  int target = TO_INT32(info[0]);
+  int pname = TO_INT32(info[1]);
+  float param = TO_FLOAT(info[2]);
 
   glTexParameterf(target, pname, param);
 }
@@ -2743,7 +3100,7 @@ NAN_METHOD(WebGLRenderingContext::TexParameterf) {
 
 NAN_METHOD(WebGLRenderingContext::Clear) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
 
   glClear(arg);
 
@@ -2753,7 +3110,7 @@ NAN_METHOD(WebGLRenderingContext::Clear) {
 
 NAN_METHOD(WebGLRenderingContext::UseProgram) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLint programId = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Int32Value() : 0;
+  GLint programId = info[0]->IsObject() ? TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glUseProgram(programId);
 
@@ -2778,15 +3135,15 @@ NAN_METHOD(WebGLRenderingContext::BindBuffer) {
     return Nan::ThrowError("BindBuffer requires at least 2 arguments");
   } else if (!info[0]->IsNumber()) {
     return Nan::ThrowError("First argument to BindBuffer must be a number");
-  } else if (info[1]->IsObject() && info[1]->ToObject()->Get(JS_STR("id"))->IsNumber()) {
-    target = info[0]->Uint32Value();
-    buffer = info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  } else if (info[1]->IsObject() && JS_OBJ(info[1])->Get(JS_STR("id"))->IsNumber()) {
+    target = TO_UINT32(info[0]);
+    buffer = TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id")));
     glBindBuffer(target, buffer);
   } else if (info[1]->IsNull()) {
-    target = info[0]->Int32Value();
+    target = TO_INT32(info[0]);
     buffer = 0;
   } else {
-    return Nan::ThrowError(String::Concat(JS_STR("Second argument to BindBuffer must be null or a WebGLBuffer; was "), info[1]->ToString()));
+    return Nan::ThrowError("WebGLRenderingContext::BindBuffer: invalid arguments");
   }
 
   glBindBuffer(target, buffer);
@@ -2795,9 +3152,9 @@ NAN_METHOD(WebGLRenderingContext::BindBuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BindBufferBase) {
-  GLenum target = info[0]->Uint32Value();
-  GLuint index = info[1]->Uint32Value();
-  GLuint buffer = info[2]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLuint index = TO_UINT32(info[1]);
+  GLuint buffer = TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id")));
 
   glBindBufferBase(target, index, buffer);
 }
@@ -2815,8 +3172,8 @@ NAN_METHOD(WebGLRenderingContext::CreateFramebuffer) {
 NAN_METHOD(WebGLRenderingContext::BindFramebuffer) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
-  GLenum target = info[0]->Uint32Value();
-  GLuint framebuffer = info[1]->IsObject() ? info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value() : gl->defaultFramebuffer;
+  GLenum target = TO_UINT32(info[0]);
+  GLuint framebuffer = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : gl->defaultFramebuffer;
 
   glBindFramebuffer(target, framebuffer);
 
@@ -2827,13 +3184,21 @@ NAN_METHOD(WebGLRenderingContext::BindFramebuffer) {
   }
 }
 
+NAN_METHOD(WebGLRenderingContext::BindFramebufferRaw) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
+  GLenum target = TO_UINT32(info[0]);
+  GLuint framebuffer = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
+
+  glBindFramebuffer(target, framebuffer);
+}
 
 NAN_METHOD(WebGLRenderingContext::FramebufferTexture2D) {
-  GLenum target = info[0]->Uint32Value();
-  GLenum attachment = info[1]->Int32Value();
-  GLenum textarget = info[2]->Int32Value();
-  GLuint texture = info[3]->IsObject() ? info[3]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
-  GLint level = info[4]->Int32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLenum attachment = TO_INT32(info[1]);
+  GLenum textarget = TO_INT32(info[2]);
+  GLuint texture = info[3]->IsObject() ? TO_UINT32(JS_OBJ(info[3])->Get(JS_STR("id"))) : 0;
+  GLint level = TO_INT32(info[4]);
 
   glFramebufferTexture2D(target, attachment, textarget, texture, level);
 
@@ -2841,16 +3206,18 @@ NAN_METHOD(WebGLRenderingContext::FramebufferTexture2D) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BlitFramebuffer) {
-  int sx = info[0]->Uint32Value();
-  int sy = info[1]->Uint32Value();
-  int sw = info[2]->Uint32Value();
-  int sh = info[3]->Uint32Value();
-  int dx = info[4]->Uint32Value();
-  int dy = info[5]->Uint32Value();
-  int dw = info[6]->Uint32Value();
-  int dh = info[7]->Uint32Value();
-  GLbitfield mask = info[8]->Uint32Value();
-  GLenum filter = info[9]->Uint32Value();
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
+  int sx = TO_UINT32(info[0]);
+  int sy = TO_UINT32(info[1]);
+  int sw = TO_UINT32(info[2]);
+  int sh = TO_UINT32(info[3]);
+  int dx = TO_UINT32(info[4]);
+  int dy = TO_UINT32(info[5]);
+  int dw = TO_UINT32(info[6]);
+  int dh = TO_UINT32(info[7]);
+  GLbitfield mask = TO_UINT32(info[8]);
+  GLenum filter = TO_UINT32(info[9]);
 
   glBlitFramebuffer(
     sx, sy,
@@ -2861,11 +3228,13 @@ NAN_METHOD(WebGLRenderingContext::BlitFramebuffer) {
     filter
   );
 
+  gl->dirty = true;
+
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::BufferData) {
-  GLenum target = info[0]->Uint32Value();
+  GLenum target = TO_UINT32(info[0]);
   Local<Object> obj = Local<Object>::Cast(info[1]);
 
   char *data;
@@ -2874,12 +3243,12 @@ NAN_METHOD(WebGLRenderingContext::BufferData) {
   if (obj->IsArrayBufferView()) {
     Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(obj);
     data = (char *)arrayBufferView->Buffer()->GetContents().Data() + arrayBufferView->ByteOffset();
-    usage = info[2]->Uint32Value();
+    usage = TO_UINT32(info[2]);
 
     if (info[3]->IsNumber()) {
-      size_t srcOffset = info[3]->Uint32Value() * getArrayBufferViewElementSize(arrayBufferView);
+      size_t srcOffset = TO_UINT32(info[3]) * getArrayBufferViewElementSize(arrayBufferView);
       data += srcOffset;
-      size = info[4]->IsNumber() ? info[4]->Uint32Value() : 0;
+      size = info[4]->IsNumber() ? TO_UINT32(info[4]) : 0;
       if (size == 0) {
         size = arrayBufferView->ByteLength() - srcOffset;
       }
@@ -2890,15 +3259,15 @@ NAN_METHOD(WebGLRenderingContext::BufferData) {
     Local<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::Cast(obj);
     data = (char *)arrayBuffer->GetContents().Data();
     size = arrayBuffer->ByteLength();
-    usage = info[2]->Int32Value();
+    usage = TO_INT32(info[2]);
   } else if(obj->IsNumber()) {
     data = nullptr;
-    size = info[1]->Uint32Value();
-    usage = info[2]->Int32Value();
+    size = TO_UINT32(info[1]);
+    usage = TO_INT32(info[2]);
   } else if (obj->IsNull() || obj->IsUndefined()) {
     data = nullptr;
     size = 0;
-    usage = info[2]->Int32Value();
+    usage = TO_INT32(info[2]);
   } else {
     Nan::ThrowError("bufferData: invalid arguments");
     return;
@@ -2909,8 +3278,8 @@ NAN_METHOD(WebGLRenderingContext::BufferData) {
 
 
 NAN_METHOD(WebGLRenderingContext::BufferSubData) {
-  GLenum target = info[0]->Uint32Value();
-  GLint dstOffset = info[1]->Int32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLint dstOffset = TO_INT32(info[1]);
   Local<Object> obj = Local<Object>::Cast(info[2]);
 
   char *data;
@@ -2920,9 +3289,9 @@ NAN_METHOD(WebGLRenderingContext::BufferSubData) {
     data = (char *)arrayBufferView->Buffer()->GetContents().Data() + arrayBufferView->ByteOffset();
 
     if (info[3]->IsNumber()) {
-      size_t srcOffset = info[3]->Uint32Value() * getArrayBufferViewElementSize(arrayBufferView);
+      size_t srcOffset = TO_UINT32(info[3]) * getArrayBufferViewElementSize(arrayBufferView);
       data += srcOffset;
-      size = info[4]->IsNumber() ? info[4]->Uint32Value() : 0;
+      size = info[4]->IsNumber() ? TO_UINT32(info[4]) : 0;
       if (size == 0) {
         size = arrayBufferView->ByteLength() - srcOffset;
       }
@@ -2943,7 +3312,7 @@ NAN_METHOD(WebGLRenderingContext::BufferSubData) {
 
 
 NAN_METHOD(WebGLRenderingContext::BlendEquation) {
-  GLint mode = info[0]->Int32Value();
+  GLint mode = TO_INT32(info[0]);
   glBlendEquation(mode);
 
   // info.GetReturnValue().Set(Nan::Undefined());
@@ -2951,8 +3320,8 @@ NAN_METHOD(WebGLRenderingContext::BlendEquation) {
 
 
 NAN_METHOD(WebGLRenderingContext::BlendFunc) {
-  GLint sfactor = info[0]->Int32Value();
-  GLint dfactor = info[1]->Int32Value();
+  GLint sfactor = TO_INT32(info[0]);
+  GLint dfactor = TO_INT32(info[1]);
 
   glBlendFunc(sfactor, dfactor);
 
@@ -2961,7 +3330,7 @@ NAN_METHOD(WebGLRenderingContext::BlendFunc) {
 
 
 NAN_METHOD(WebGLRenderingContext::EnableVertexAttribArray) {
-  GLint arg = info[0]->Int32Value();
+  GLint arg = TO_INT32(info[0]);
   glEnableVertexAttribArray(arg);
 
   // info.GetReturnValue().Set(Nan::Undefined());
@@ -2969,12 +3338,12 @@ NAN_METHOD(WebGLRenderingContext::EnableVertexAttribArray) {
 
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribPointer) {
-  GLuint indx = info[0]->Uint32Value();
-  GLint size = info[1]->Int32Value();
-  GLenum type = info[2]->Uint32Value();
-  GLboolean normalized = info[3]->BooleanValue();
-  GLint stride = info[4]->Int32Value();
-  GLint offset = info[5]->Int32Value();
+  GLuint indx = TO_UINT32(info[0]);
+  GLint size = TO_INT32(info[1]);
+  GLenum type = TO_UINT32(info[2]);
+  GLboolean normalized = TO_BOOL(info[3]);
+  GLint stride = TO_INT32(info[4]);
+  GLint offset = TO_INT32(info[5]);
 
   //    printf("VertexAttribPointer %d %d %d %d %d %d\n", indx, size, type, normalized, stride, offset);
   glVertexAttribPointer(indx, size, type, normalized, stride, (const GLvoid *)offset);
@@ -2983,11 +3352,11 @@ NAN_METHOD(WebGLRenderingContext::VertexAttribPointer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribIPointer) {
-  GLuint indx = info[0]->Uint32Value();
-  GLint size = info[1]->Int32Value();
-  GLenum type = info[2]->Uint32Value();
-  GLint stride = info[3]->Int32Value();
-  GLint offset = info[4]->Int32Value();
+  GLuint indx = TO_UINT32(info[0]);
+  GLint size = TO_INT32(info[1]);
+  GLenum type = TO_UINT32(info[2]);
+  GLint stride = TO_INT32(info[3]);
+  GLint offset = TO_INT32(info[4]);
 
   glVertexAttribIPointer(indx, size, type, stride, (const GLvoid *)offset);
 
@@ -2996,7 +3365,7 @@ NAN_METHOD(WebGLRenderingContext::VertexAttribIPointer) {
 
 NAN_METHOD(WebGLRenderingContext::ActiveTexture) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum activeTexture = info[0]->Uint32Value();
+  GLenum activeTexture = TO_UINT32(info[0]);
 
   glActiveTexture(activeTexture);
 
@@ -3008,10 +3377,10 @@ NAN_METHOD(WebGLRenderingContext::ActiveTexture) {
 
 NAN_METHOD(WebGLRenderingContext::DrawElements) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum mode = info[0]->Uint32Value();
-  GLsizei count = info[1]->Int32Value();
-  GLenum type = info[2]->Uint32Value();
-  GLvoid *offset = reinterpret_cast<GLvoid*>(info[3]->Uint32Value());
+  GLenum mode = TO_UINT32(info[0]);
+  GLsizei count = TO_INT32(info[1]);
+  GLenum type = TO_UINT32(info[2]);
+  GLvoid *offset = reinterpret_cast<GLvoid*>(TO_UINT32(info[3]));
 
   glDrawElements(mode, count, type, offset);
 
@@ -3022,11 +3391,11 @@ NAN_METHOD(WebGLRenderingContext::DrawElements) {
 
 NAN_METHOD(WebGLRenderingContext::DrawElementsInstanced) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum mode = info[0]->Uint32Value();
-  GLsizei count = info[1]->Int32Value();
-  GLenum type = info[2]->Uint32Value();
-  GLvoid *offset = reinterpret_cast<GLvoid*>(info[3]->Uint32Value());
-  GLsizei primcount = info[4]->Int32Value();
+  GLenum mode = TO_UINT32(info[0]);
+  GLsizei count = TO_INT32(info[1]);
+  GLenum type = TO_UINT32(info[2]);
+  GLvoid *offset = reinterpret_cast<GLvoid*>(TO_UINT32(info[3]));
+  GLsizei primcount = TO_INT32(info[4]);
 
   glDrawElementsInstanced(mode, count, type, offset, primcount);
 
@@ -3038,11 +3407,11 @@ NAN_METHOD(WebGLRenderingContext::DrawElementsInstanced) {
 NAN_METHOD(WebGLRenderingContext::DrawElementsInstancedANGLE) {
   Local<Object> contextObj = Local<Object>::Cast(info.This()->Get(JS_STR("context")));
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(contextObj);
-  GLenum mode = info[0]->Uint32Value();
-  GLsizei count = info[1]->Int32Value();
-  GLenum type = info[2]->Uint32Value();
-  GLvoid *offset = reinterpret_cast<GLvoid*>(info[3]->Uint32Value());
-  GLsizei primcount = info[4]->Int32Value();
+  GLenum mode = TO_UINT32(info[0]);
+  GLsizei count = TO_INT32(info[1]);
+  GLenum type = TO_UINT32(info[2]);
+  GLvoid *offset = reinterpret_cast<GLvoid*>(TO_UINT32(info[3]));
+  GLsizei primcount = TO_INT32(info[4]);
 
   glDrawElementsInstanced(mode, count, type, offset, primcount);
 
@@ -3053,12 +3422,12 @@ NAN_METHOD(WebGLRenderingContext::DrawElementsInstancedANGLE) {
 
 NAN_METHOD(WebGLRenderingContext::DrawRangeElements) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum mode = info[0]->Uint32Value();
-  GLuint start = info[1]->Uint32Value();
-  GLuint end = info[2]->Uint32Value();
-  GLsizei count = info[3]->Uint32Value();
-  GLenum type = info[4]->Uint32Value();
-  GLintptr offset = info[5]->Int32Value();
+  GLenum mode = TO_UINT32(info[0]);
+  GLuint start = TO_UINT32(info[1]);
+  GLuint end = TO_UINT32(info[2]);
+  GLsizei count = TO_UINT32(info[3]);
+  GLenum type = TO_UINT32(info[4]);
+  GLintptr offset = TO_INT32(info[5]);
 
   glDrawRangeElements(mode, start, end, count, type, (void *)offset);
 
@@ -3082,41 +3451,41 @@ NAN_METHOD(WebGLRenderingContext::Finish) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib1f) {
-  GLuint indx = info[0]->Int32Value();
-  GLfloat x = info[1]->NumberValue();
+  GLuint indx = TO_UINT32(info[0]);
+  GLfloat x = TO_FLOAT(info[1]);
 
   glVertexAttrib1f(indx, x);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib2f) {
-  GLuint indx = info[0]->Int32Value();
-  float x = (float)info[1]->NumberValue();
-  float y = (float)info[2]->NumberValue();
+  GLuint indx = TO_UINT32(info[0]);
+  float x = TO_FLOAT(info[1]);
+  float y = TO_FLOAT(info[2]);
 
   glVertexAttrib2f(indx, x, y);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib3f) {
-  GLuint indx = info[0]->Int32Value();
-  float x = (float)info[1]->NumberValue();
-  float y = (float)info[2]->NumberValue();
-  float z = (float)info[3]->NumberValue();
+  GLuint indx = TO_INT32(info[0]);
+  float x = TO_FLOAT(info[1]);
+  float y = TO_FLOAT(info[2]);
+  float z = TO_FLOAT(info[3]);
 
   glVertexAttrib3f(indx, x, y, z);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib4f) {
-  GLuint indx = info[0]->Int32Value();
-  float x = (float)info[1]->NumberValue();
-  float y = (float)info[2]->NumberValue();
-  float z = (float)info[3]->NumberValue();
-  float w = (float)info[4]->NumberValue();
+  GLuint indx = TO_UINT32(info[0]);
+  float x = TO_FLOAT(info[1]);
+  float y = TO_FLOAT(info[2]);
+  float z = TO_FLOAT(info[3]);
+  float w = TO_FLOAT(info[4]);
 
   glVertexAttrib4f(indx, x, y, z, w);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib1fv) {
-  int indx = info[0]->Int32Value();
+  GLuint indx = TO_UINT32(info[0]);
 
   GLfloat *data;
   int num;
@@ -3136,7 +3505,7 @@ NAN_METHOD(WebGLRenderingContext::VertexAttrib1fv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib2fv) {
-  int indx = info[0]->Int32Value();
+  int indx = TO_INT32(info[0]);
 
   GLfloat *data;
   int num;
@@ -3156,7 +3525,7 @@ NAN_METHOD(WebGLRenderingContext::VertexAttrib2fv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib3fv) {
-  int indx = info[0]->Int32Value();
+  int indx = TO_INT32(info[0]);
 
   GLfloat *data;
   int num;
@@ -3176,7 +3545,7 @@ NAN_METHOD(WebGLRenderingContext::VertexAttrib3fv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttrib4fv) {
-  int indx = info[0]->Int32Value();
+  int indx = TO_INT32(info[0]);
 
   GLfloat *data;
   int num;
@@ -3196,17 +3565,17 @@ NAN_METHOD(WebGLRenderingContext::VertexAttrib4fv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribI4i) {
-  GLint index = info[0]->Int32Value();
-  GLint v0 = info[1]->Int32Value();
-  GLint v1 = info[2]->Int32Value();
-  GLint v2 = info[3]->Int32Value();
-  GLint v3 = info[4]->Int32Value();
+  GLint index = TO_INT32(info[0]);
+  GLint v0 = TO_INT32(info[1]);
+  GLint v1 = TO_INT32(info[2]);
+  GLint v2 = TO_INT32(info[3]);
+  GLint v3 = TO_INT32(info[4]);
 
   glVertexAttribI4i(index, v0, v1, v2, v3);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribI4iv) {
-  GLuint index = info[0]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
   Local<Value> dataValue = info[1];
 
   GLint *data;
@@ -3227,17 +3596,17 @@ NAN_METHOD(WebGLRenderingContext::VertexAttribI4iv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribI4ui) {
-  GLuint index = info[0]->Uint32Value();
-  GLuint v0 = info[1]->Uint32Value();
-  GLuint v1 = info[2]->Uint32Value();
-  GLuint v2 = info[3]->Uint32Value();
-  GLuint v3 = info[4]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
+  GLuint v0 = TO_UINT32(info[1]);
+  GLuint v1 = TO_UINT32(info[2]);
+  GLuint v2 = TO_UINT32(info[3]);
+  GLuint v3 = TO_UINT32(info[4]);
 
   glVertexAttribI4ui(index, v0, v1, v2, v3);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribI4uiv) {
-  GLuint index = info[0]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
   Local<Value> dataValue = info[1];
 
   GLuint *data;
@@ -3258,15 +3627,15 @@ NAN_METHOD(WebGLRenderingContext::VertexAttribI4uiv) {
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribDivisor) {
-  GLuint index = info[0]->Uint32Value();
-  GLuint divisor = info[1]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
+  GLuint divisor = TO_UINT32(info[1]);
 
   glVertexAttribDivisor(index, divisor);
 }
 
 NAN_METHOD(WebGLRenderingContext::VertexAttribDivisorANGLE) {
-  GLuint index = info[0]->Uint32Value();
-  GLuint divisor = info[1]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
+  GLuint divisor = TO_UINT32(info[1]);
 
   glVertexAttribDivisor(index, divisor);
 }
@@ -3276,7 +3645,7 @@ NAN_METHOD(WebGLRenderingContext::DrawBuffers) {
   GLenum buffers[32];
   size_t numBuffers = std::min<size_t>(buffersArray->Length(), sizeof(buffers)/sizeof(buffers[0]));
   for (size_t i = 0; i < numBuffers; i++) {
-    buffers[i] = buffersArray->Get(i)->Uint32Value();
+    buffers[i] = TO_UINT32(buffersArray->Get(i));
   }
 
   glDrawBuffers(numBuffers, buffers);
@@ -3289,7 +3658,7 @@ NAN_METHOD(WebGLRenderingContext::DrawBuffersWEBGL) {
   GLenum buffers[32];
   size_t numBuffers = std::min<size_t>(buffersArray->Length(), sizeof(buffers)/sizeof(buffers[0]));
   for (size_t i = 0; i < numBuffers; i++) {
-    buffers[i] = buffersArray->Get(i)->Uint32Value();
+    buffers[i] = TO_UINT32(buffersArray->Get(i));
   }
 
   glDrawBuffers(numBuffers, buffers);
@@ -3298,10 +3667,10 @@ NAN_METHOD(WebGLRenderingContext::DrawBuffersWEBGL) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BlendColor) {
-  GLclampf r = (float)info[0]->NumberValue();
-  GLclampf g = (float)info[1]->NumberValue();
-  GLclampf b = (float)info[2]->NumberValue();
-  GLclampf a = (float)info[3]->NumberValue();
+  GLclampf r = TO_FLOAT(info[0]);
+  GLclampf g = TO_FLOAT(info[1]);
+  GLclampf b = TO_FLOAT(info[2]);
+  GLclampf a = TO_FLOAT(info[3]);
 
   glBlendColor(r, g, b, a);
 
@@ -3309,8 +3678,8 @@ NAN_METHOD(WebGLRenderingContext::BlendColor) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BlendEquationSeparate) {
-  GLenum modeRGB = info[0]->Int32Value();
-  GLenum modeAlpha = info[1]->Int32Value();
+  GLenum modeRGB = TO_INT32(info[0]);
+  GLenum modeAlpha = TO_INT32(info[1]);
 
   glBlendEquationSeparate(modeRGB, modeAlpha);
 
@@ -3318,10 +3687,10 @@ NAN_METHOD(WebGLRenderingContext::BlendEquationSeparate) {
 }
 
 NAN_METHOD(WebGLRenderingContext::BlendFuncSeparate) {
-  GLenum srcRGB = info[0]->Int32Value();
-  GLenum dstRGB = info[1]->Int32Value();
-  GLenum srcAlpha = info[2]->Int32Value();
-  GLenum dstAlpha = info[3]->Int32Value();
+  GLenum srcRGB = TO_INT32(info[0]);
+  GLenum dstRGB = TO_INT32(info[1]);
+  GLenum srcAlpha = TO_INT32(info[2]);
+  GLenum dstAlpha = TO_INT32(info[3]);
 
   glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
 
@@ -3329,7 +3698,7 @@ NAN_METHOD(WebGLRenderingContext::BlendFuncSeparate) {
 }
 
 NAN_METHOD(WebGLRenderingContext::ClearStencil) {
-  GLint s = info[0]->Int32Value();
+  GLint s = TO_INT32(info[0]);
 
   glClearStencil(s);
 
@@ -3339,10 +3708,10 @@ NAN_METHOD(WebGLRenderingContext::ClearStencil) {
 NAN_METHOD(WebGLRenderingContext::ColorMask) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
-  GLboolean r = info[0]->BooleanValue();
-  GLboolean g = info[1]->BooleanValue();
-  GLboolean b = info[2]->BooleanValue();
-  GLboolean a = info[3]->BooleanValue();
+  GLboolean r = TO_BOOL(info[0]);
+  GLboolean g = TO_BOOL(info[1]);
+  GLboolean b = TO_BOOL(info[2]);
+  GLboolean a = TO_BOOL(info[3]);
 
   glColorMask(r, g, b, a);
 
@@ -3352,14 +3721,14 @@ NAN_METHOD(WebGLRenderingContext::ColorMask) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CopyTexImage2D) {
-  GLenum target = info[0]->Uint32Value();
-  GLint level = info[1]->Int32Value();
-  GLenum internalformat = info[2]->Uint32Value();
-  GLint x = info[3]->Int32Value();
-  GLint y = info[4]->Int32Value();
-  GLsizei width = info[5]->Uint32Value();
-  GLsizei height = info[6]->Uint32Value();
-  GLint border = info[7]->Int32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLint level = TO_INT32(info[1]);
+  GLenum internalformat = TO_UINT32(info[2]);
+  GLint x = TO_INT32(info[3]);
+  GLint y = TO_INT32(info[4]);
+  GLsizei width = TO_UINT32(info[5]);
+  GLsizei height = TO_UINT32(info[6]);
+  GLint border = TO_INT32(info[7]);
 
   glCopyTexImage2D(target, level, internalformat, x, y, width, height, border);
 
@@ -3367,14 +3736,14 @@ NAN_METHOD(WebGLRenderingContext::CopyTexImage2D) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CopyTexSubImage2D) {
-  GLenum target = info[0]->Uint32Value();
-  GLint level = info[1]->Int32Value();
-  GLint xoffset = info[2]->Int32Value();
-  GLint yoffset = info[3]->Int32Value();
-  GLint x = info[4]->Int32Value();
-  GLint y = info[5]->Int32Value();
-  GLsizei width = info[6]->Uint32Value();
-  GLsizei height = info[7]->Uint32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLint level = TO_INT32(info[1]);
+  GLint xoffset = TO_INT32(info[2]);
+  GLint yoffset = TO_INT32(info[3]);
+  GLint x = TO_INT32(info[4]);
+  GLint y = TO_INT32(info[5]);
+  GLsizei width = TO_UINT32(info[6]);
+  GLsizei height = TO_UINT32(info[7]);
 
   glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
 
@@ -3382,7 +3751,7 @@ NAN_METHOD(WebGLRenderingContext::CopyTexSubImage2D) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CullFace) {
-  GLenum mode = info[0]->Int32Value();
+  GLenum mode = TO_INT32(info[0]);
 
   glCullFace(mode);
 
@@ -3390,7 +3759,7 @@ NAN_METHOD(WebGLRenderingContext::CullFace) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DepthMask) {
-  GLboolean flag = info[0]->BooleanValue();
+  GLboolean flag = TO_BOOL(info[0]);
 
   glDepthMask(flag);
 
@@ -3398,8 +3767,8 @@ NAN_METHOD(WebGLRenderingContext::DepthMask) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DepthRange) {
-  GLclampf zNear = (float) info[0]->NumberValue();
-  GLclampf zFar = (float) info[1]->NumberValue();
+  GLclampf zNear = TO_FLOAT(info[0]);
+  GLclampf zFar = TO_FLOAT(info[1]);
 
   glDepthRangef(zNear, zFar);
 
@@ -3407,15 +3776,15 @@ NAN_METHOD(WebGLRenderingContext::DepthRange) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DisableVertexAttribArray) {
-  GLuint index = info[0]->Int32Value();
+  GLuint index = TO_INT32(info[0]);
   glDisableVertexAttribArray(index);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::Hint) {
-  GLenum target = info[0]->Int32Value();
-  GLenum mode = info[1]->Int32Value();
+  GLenum target = TO_INT32(info[0]);
+  GLenum mode = TO_INT32(info[1]);
 
   glHint(target, mode);
 
@@ -3423,22 +3792,22 @@ NAN_METHOD(WebGLRenderingContext::Hint) {
 }
 
 NAN_METHOD(WebGLRenderingContext::IsEnabled) {
-  GLenum cap = info[0]->Uint32Value();
+  GLenum cap = TO_UINT32(info[0]);
   bool ret = glIsEnabled(cap);
 
   info.GetReturnValue().Set(Nan::New<Boolean>(ret));
 }
 
 NAN_METHOD(WebGLRenderingContext::LineWidth) {
-  GLfloat width = (float) info[0]->NumberValue();
+  GLfloat width = TO_FLOAT(info[0]);
   glLineWidth(width);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::PolygonOffset) {
-  GLfloat factor = (float) info[0]->NumberValue();
-  GLfloat units = (float) info[1]->NumberValue();
+  GLfloat factor = TO_FLOAT(info[0]);
+  GLfloat units = TO_FLOAT(info[1]);
 
   glPolygonOffset(factor, units);
 
@@ -3446,8 +3815,8 @@ NAN_METHOD(WebGLRenderingContext::PolygonOffset) {
 }
 
 NAN_METHOD(WebGLRenderingContext::SampleCoverage) {
-  GLclampf value = info[0]->NumberValue();
-  GLboolean invert = info[1]->BooleanValue();
+  GLclampf value = TO_FLOAT(info[0]);
+  GLboolean invert = TO_BOOL(info[1]);
 
   glSampleCoverage(value, invert);
 
@@ -3455,10 +3824,10 @@ NAN_METHOD(WebGLRenderingContext::SampleCoverage) {
 }
 
 NAN_METHOD(WebGLRenderingContext::Scissor) {
-  GLint x = info[0]->Int32Value();
-  GLint y = info[1]->Int32Value();
-  GLsizei width = info[2]->Uint32Value();
-  GLsizei height = info[3]->Uint32Value();
+  GLint x = TO_INT32(info[0]);
+  GLint y = TO_INT32(info[1]);
+  GLsizei width = TO_UINT32(info[2]);
+  GLsizei height = TO_UINT32(info[3]);
 
   glScissor(x, y, width, height);
 
@@ -3466,9 +3835,9 @@ NAN_METHOD(WebGLRenderingContext::Scissor) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilFunc) {
-  GLenum func = info[0]->Int32Value();
-  GLint ref = info[1]->Int32Value();
-  GLuint mask = info[2]->Int32Value();
+  GLenum func = TO_INT32(info[0]);
+  GLint ref = TO_INT32(info[1]);
+  GLuint mask = TO_INT32(info[2]);
 
   glStencilFunc(func, ref, mask);
 
@@ -3476,10 +3845,10 @@ NAN_METHOD(WebGLRenderingContext::StencilFunc) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilFuncSeparate) {
-  GLenum face = info[0]->Int32Value();
-  GLenum func = info[1]->Int32Value();
-  GLint ref = info[2]->Int32Value();
-  GLuint mask = info[3]->Int32Value();
+  GLenum face = TO_INT32(info[0]);
+  GLenum func = TO_INT32(info[1]);
+  GLint ref = TO_INT32(info[2]);
+  GLuint mask = TO_INT32(info[3]);
 
   glStencilFuncSeparate(face, func, ref, mask);
 
@@ -3487,7 +3856,7 @@ NAN_METHOD(WebGLRenderingContext::StencilFuncSeparate) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilMask) {
-  GLuint mask = info[0]->Uint32Value();
+  GLuint mask = TO_UINT32(info[0]);
 
   glStencilMask(mask);
 
@@ -3495,8 +3864,8 @@ NAN_METHOD(WebGLRenderingContext::StencilMask) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilMaskSeparate) {
-  GLenum face = info[0]->Int32Value();
-  GLuint mask = info[1]->Uint32Value();
+  GLenum face = TO_INT32(info[0]);
+  GLuint mask = TO_UINT32(info[1]);
 
   glStencilMaskSeparate(face, mask);
 
@@ -3504,9 +3873,9 @@ NAN_METHOD(WebGLRenderingContext::StencilMaskSeparate) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilOp) {
-  GLenum fail = info[0]->Int32Value();
-  GLenum zfail = info[1]->Int32Value();
-  GLenum zpass = info[2]->Int32Value();
+  GLenum fail = TO_INT32(info[0]);
+  GLenum zfail = TO_INT32(info[1]);
+  GLenum zpass = TO_INT32(info[2]);
 
   glStencilOp(fail, zfail, zpass);
 
@@ -3514,10 +3883,10 @@ NAN_METHOD(WebGLRenderingContext::StencilOp) {
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilOpSeparate) {
-  GLenum face = info[0]->Int32Value();
-  GLenum fail = info[1]->Int32Value();
-  GLenum zfail = info[2]->Int32Value();
-  GLenum zpass = info[3]->Int32Value();
+  GLenum face = TO_INT32(info[0]);
+  GLenum fail = TO_INT32(info[1]);
+  GLenum zfail = TO_INT32(info[2]);
+  GLenum zpass = TO_INT32(info[3]);
 
   glStencilOpSeparate(face, fail, zfail, zpass);
 
@@ -3527,8 +3896,8 @@ NAN_METHOD(WebGLRenderingContext::StencilOpSeparate) {
 NAN_METHOD(WebGLRenderingContext::BindRenderbuffer) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
-  GLenum target = info[0]->Int32Value();
-  GLuint renderbuffer = info[1]->IsObject() ? info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLenum target = TO_INT32(info[0]);
+  GLuint renderbuffer = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
 
   glBindRenderbuffer(target, renderbuffer);
 
@@ -3547,7 +3916,7 @@ NAN_METHOD(WebGLRenderingContext::CreateRenderbuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteBuffer) {
-  GLuint buffer = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint buffer = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteBuffers(1, &buffer);
 
@@ -3555,7 +3924,7 @@ NAN_METHOD(WebGLRenderingContext::DeleteBuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteFramebuffer) {
-  GLuint framebuffer = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint framebuffer = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteFramebuffers(1, &framebuffer);
 
@@ -3563,13 +3932,13 @@ NAN_METHOD(WebGLRenderingContext::DeleteFramebuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteProgram) {
-  GLint programId = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Int32Value() : 0;
+  GLint programId = info[0]->IsObject() ? TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteProgram(programId);
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteRenderbuffer) {
-  GLuint renderbuffer = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint renderbuffer = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteRenderbuffers(1, &renderbuffer);
 
@@ -3577,7 +3946,7 @@ NAN_METHOD(WebGLRenderingContext::DeleteRenderbuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteShader) {
-  GLuint shaderId = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint shaderId = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteShader(shaderId);
 
@@ -3585,7 +3954,7 @@ NAN_METHOD(WebGLRenderingContext::DeleteShader) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteTexture) {
-  GLuint texture = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint texture = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteTextures(1, &texture);
 
@@ -3593,17 +3962,17 @@ NAN_METHOD(WebGLRenderingContext::DeleteTexture) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DetachShader) {
-  GLuint programId = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-  GLuint shaderId = info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint programId = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint shaderId = TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id")));
 
   glDetachShader(programId, shaderId);
 }
 
 NAN_METHOD(WebGLRenderingContext::FramebufferRenderbuffer) {
-  GLenum target = info[0]->Int32Value();
-  GLenum attachment = info[1]->Int32Value();
-  GLenum renderbuffertarget = info[2]->Int32Value();
-  GLuint renderbuffer = info[3]->IsObject() ? info[3]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLenum target = TO_INT32(info[0]);
+  GLenum attachment = TO_INT32(info[1]);
+  GLenum renderbuffertarget = TO_INT32(info[2]);
+  GLuint renderbuffer = info[3]->IsObject() ? TO_UINT32(JS_OBJ(info[3])->Get(JS_STR("id"))) : 0;
 
   glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
 
@@ -3611,8 +3980,8 @@ NAN_METHOD(WebGLRenderingContext::FramebufferRenderbuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetVertexAttribOffset) {
-  GLuint index = info[0]->Uint32Value();
-  GLenum pname = info[1]->Uint32Value();
+  GLuint index = TO_UINT32(info[0]);
+  GLenum pname = TO_UINT32(info[1]);
   void *ret = nullptr;
 
   glGetVertexAttribPointerv(index, pname, &ret);
@@ -3621,8 +3990,8 @@ NAN_METHOD(WebGLRenderingContext::GetVertexAttribOffset) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderPrecisionFormat) {
-  GLenum shaderType = info[0]->Uint32Value();
-  GLenum precisionType = info[1]->Uint32Value();
+  GLenum shaderType = TO_INT32(info[0]);
+  GLenum precisionType = TO_INT32(info[1]);
   GLint range[2];
   GLint precision;
 
@@ -3637,7 +4006,7 @@ NAN_METHOD(WebGLRenderingContext::GetShaderPrecisionFormat) {
 
 NAN_METHOD(WebGLRenderingContext::IsBuffer) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsBuffer(arg);
 
     info.GetReturnValue().Set(Nan::New<Boolean>(ret));
@@ -3648,7 +4017,7 @@ NAN_METHOD(WebGLRenderingContext::IsBuffer) {
 
 NAN_METHOD(WebGLRenderingContext::IsFramebuffer) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsFramebuffer(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3659,7 +4028,7 @@ NAN_METHOD(WebGLRenderingContext::IsFramebuffer) {
 
 NAN_METHOD(WebGLRenderingContext::IsProgram) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsProgram(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3670,7 +4039,7 @@ NAN_METHOD(WebGLRenderingContext::IsProgram) {
 
 NAN_METHOD(WebGLRenderingContext::IsRenderbuffer) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsRenderbuffer(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3681,7 +4050,7 @@ NAN_METHOD(WebGLRenderingContext::IsRenderbuffer) {
 
 NAN_METHOD(WebGLRenderingContext::IsShader) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsShader(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3692,7 +4061,7 @@ NAN_METHOD(WebGLRenderingContext::IsShader) {
 
 NAN_METHOD(WebGLRenderingContext::IsTexture) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsTexture(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3703,7 +4072,7 @@ NAN_METHOD(WebGLRenderingContext::IsTexture) {
 
 NAN_METHOD(WebGLRenderingContext::IsVertexArray) {
   if (info[0]->IsObject()) {
-    GLuint arg = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
     bool ret = glIsVertexArray(arg);
 
     info.GetReturnValue().Set(JS_BOOL(ret));
@@ -3714,7 +4083,7 @@ NAN_METHOD(WebGLRenderingContext::IsVertexArray) {
 
 NAN_METHOD(WebGLRenderingContext::IsSync) {
   if (info[0]->IsObject()) {
-    Local<Value> syncId = info[0]->ToObject()->Get(JS_STR("id"));
+    Local<Value> syncId = JS_OBJ(info[0])->Get(JS_STR("id"));
     if (syncId->IsArray()) {
       Local<Array> syncArray = Local<Array>::Cast(syncId);
       if (syncArray->Get(0)->IsNumber() && syncArray->Get(1)->IsNumber()) {
@@ -3734,10 +4103,10 @@ NAN_METHOD(WebGLRenderingContext::IsSync) {
 }
 
 NAN_METHOD(WebGLRenderingContext::RenderbufferStorage) {
-  GLenum target = info[0]->Int32Value();
-  GLenum internalformat = info[1]->Int32Value();
-  GLsizei width = info[2]->Uint32Value();
-  GLsizei height = info[3]->Uint32Value();
+  GLenum target = TO_INT32(info[0]);
+  GLenum internalformat = TO_INT32(info[1]);
+  GLsizei width = TO_UINT32(info[2]);
+  GLsizei height = TO_UINT32(info[3]);
 
   glRenderbufferStorage(target, internalformat, width, height);
 
@@ -3745,7 +4114,7 @@ NAN_METHOD(WebGLRenderingContext::RenderbufferStorage) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderSource) {
-  GLuint shaderId = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint shaderId = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
   GLint len;
   glGetShaderiv(shaderId, GL_SHADER_SOURCE_LENGTH, &len);
@@ -3760,38 +4129,78 @@ NAN_METHOD(WebGLRenderingContext::GetShaderSource) {
 }
 
 NAN_METHOD(WebGLRenderingContext::ValidateProgram) {
-  GLuint programId = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint programId = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
 
   glValidateProgram(programId);
 }
 
 NAN_METHOD(WebGLRenderingContext::TexSubImage2D) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum targetV = info[0]->Uint32Value();
-  GLint levelV = info[1]->Int32Value();
-  GLint xoffsetV = info[2]->Int32Value();
-  GLint yoffsetV = info[3]->Int32Value();
-  GLsizei widthV = info[4]->Uint32Value();
-  GLsizei heightV = info[5]->Uint32Value();
-  GLenum formatV = info[6]->Uint32Value();
-  GLenum typeV = info[7]->Uint32Value();
+  GLenum targetV = TO_UINT32(info[0]);
+  GLint levelV = TO_INT32(info[1]);
+  GLint xoffsetV = TO_INT32(info[2]);
+  GLint yoffsetV = TO_INT32(info[3]);
+  GLsizei widthV = TO_UINT32(info[4]);
+  GLsizei heightV = TO_UINT32(info[5]);
+  GLenum formatV = TO_INT32(info[6]);
+  GLenum typeV = TO_INT32(info[7]);
   Local<Value> pixels = info[8];
   Local<Value> srcOffset = info[9];
 
   if (pixels->IsArrayBufferView() && srcOffset->IsNumber()) {
     Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
-    size_t srcOffsetInt = srcOffset->Uint32Value();
+    size_t srcOffsetInt = TO_UINT32(srcOffset);
     size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
     size_t extraOffset = srcOffsetInt * elementSize;
     pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
   }
 
+  GLuint texV;
   char *pixelsV;
   if (pixels->IsNull()) {
     glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, nullptr);
   } else if (pixels->IsNumber()) {
-    GLintptr offsetV = pixels->Uint32Value();
+    GLintptr offsetV = TO_UINT32(pixels);
     glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, (void *)offsetV);
+  } else if ((texV = getImageTexture(pixels)) != 0) {
+    GLuint fbos[2];
+    glGenFramebuffers(2, fbos);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
+
+    if (gl->flipY) {
+      glBlitFramebuffer(
+        0, 0, widthV, heightV,
+        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    } else {
+      glBlitFramebuffer(
+        0, heightV, widthV, 0,
+        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    }
+
+    // glCopyTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, 0, 0, widthV, heightV);
+
+    glDeleteFramebuffers(2, fbos);
+
+    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
   } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
     size_t formatSize = getFormatSize(formatV);
     size_t typeSize = getTypeSize(typeV);
@@ -3806,7 +4215,7 @@ NAN_METHOD(WebGLRenderingContext::TexSubImage2D) {
       pixelsV2 = pixelsV;
     }
 
-    if (canvas::ImageData::getFlip() && gl->flipY && !pixels->IsArrayBufferView()) {
+    if (gl->flipY && !pixels->IsArrayBufferView()) {
       unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
       flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
 
@@ -3828,26 +4237,26 @@ NAN_METHOD(WebGLRenderingContext::TexSubImage2D) {
 
 NAN_METHOD(WebGLRenderingContext::TexStorage2D) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum target = info[0]->Uint32Value();
-  GLint levels = info[1]->Int32Value();
-  GLenum internalFormat = info[2]->Uint32Value();
-  GLsizei width = info[3]->Uint32Value();
-  GLsizei height = info[4]->Uint32Value();
+  GLenum target = TO_UINT32(info[0]);
+  GLint levels = TO_INT32(info[1]);
+  GLenum internalFormat = TO_UINT32(info[2]);
+  GLsizei width = TO_UINT32(info[3]);
+  GLsizei height = TO_UINT32(info[4]);
 
   glTexStorage2D(target, levels, internalFormat, width, height);
 }
 
 NAN_METHOD(WebGLRenderingContext::ReadPixels) {
-  GLint x = info[0]->Int32Value();
-  GLint y = info[1]->Int32Value();
-  GLsizei width = info[2]->Uint32Value();
-  GLsizei height = info[3]->Uint32Value();
-  GLenum format = info[4]->Uint32Value();
-  GLenum type = info[5]->Uint32Value();
+  GLint x = TO_INT32(info[0]);
+  GLint y = TO_INT32(info[1]);
+  GLsizei width = TO_UINT32(info[2]);
+  GLsizei height = TO_UINT32(info[3]);
+  GLenum format = TO_UINT32(info[4]);
+  GLenum type = TO_UINT32(info[5]);
 
   char *pixels;
   if (info[6]->IsNumber()) {
-    GLintptr offset = info[6]->Uint32Value();
+    GLintptr offset = TO_UINT32(info[6]);
     pixels = (char *)offset;
   } else if (info[6]->IsArrayBufferView()) {
     Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(info[6]);
@@ -3855,7 +4264,7 @@ NAN_METHOD(WebGLRenderingContext::ReadPixels) {
 
     if (pixels != nullptr) {
       if (info[7]->IsNumber()) {
-        GLuint dstOffset = info[7]->Uint32Value();
+        GLuint dstOffset = TO_UINT32(info[7]);
         GLuint elementSize = getArrayBufferViewElementSize(arrayBufferView);
         pixels += dstOffset * elementSize;
       }
@@ -3870,8 +4279,8 @@ NAN_METHOD(WebGLRenderingContext::ReadPixels) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetTexParameter) {
-  GLenum target = info[0]->Int32Value();
-  GLenum pname = info[1]->Int32Value();
+  GLenum target = TO_INT32(info[0]);
+  GLenum pname = TO_INT32(info[1]);
   GLint value;
 
   glGetTexParameteriv(target, pname, &value);
@@ -3880,8 +4289,8 @@ NAN_METHOD(WebGLRenderingContext::GetTexParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetActiveAttrib) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  GLuint index = info[1]->Int32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint index = TO_INT32(info[1]);
 
   char name[1024];
   GLsizei length = 0;
@@ -3903,8 +4312,8 @@ NAN_METHOD(WebGLRenderingContext::GetActiveAttrib) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetActiveUniform) {
-  GLint programId = info[0]->ToObject()->Get(JS_STR("id"))->Int32Value();
-  GLuint index = info[1]->Int32Value();
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint index = TO_INT32(info[1]);
 
   char name[1024];
   GLsizei length = 0;
@@ -3926,7 +4335,7 @@ NAN_METHOD(WebGLRenderingContext::GetActiveUniform) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetAttachedShaders) {
-  GLuint programId = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint programId = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLuint shaders[1024];
   GLsizei count;
 
@@ -3943,7 +4352,7 @@ NAN_METHOD(WebGLRenderingContext::GetAttachedShaders) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetParameter) {
-  GLenum name = info[0]->Int32Value();
+  GLenum name = TO_INT32(info[0]);
 
   switch (name) {
     case GL_BLEND:
@@ -4012,6 +4421,48 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     case GL_SUBPIXEL_BITS:
     case GL_UNPACK_ALIGNMENT:
     case UNPACK_COLORSPACE_CONVERSION_WEBGL:
+    case GL_FRAGMENT_SHADER_DERIVATIVE_HINT:
+    case GL_MAX_COLOR_ATTACHMENTS:
+    case GL_MAX_DRAW_BUFFERS:
+    case GL_DRAW_BUFFER0:
+    case GL_DRAW_BUFFER1:
+    case GL_DRAW_BUFFER2:
+    case GL_DRAW_BUFFER3:
+    case GL_DRAW_BUFFER4:
+    case GL_DRAW_BUFFER5:
+    case GL_DRAW_BUFFER6:
+    case GL_DRAW_BUFFER7:
+    case GL_DRAW_BUFFER8:
+    case GL_DRAW_BUFFER9:
+    case GL_DRAW_BUFFER10:
+    case GL_DRAW_BUFFER11:
+    case GL_DRAW_BUFFER12:
+    case GL_DRAW_BUFFER13:
+    case GL_DRAW_BUFFER14:
+    case GL_DRAW_BUFFER15:
+    case GL_MAX_3D_TEXTURE_SIZE:
+    case GL_MAX_ARRAY_TEXTURE_LAYERS:
+    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
+    case GL_MAX_COMBINED_UNIFORM_BLOCKS:
+    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MAX_ELEMENTS_INDICES:
+    case GL_MAX_ELEMENTS_VERTICES:
+    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
+    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
+    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
+    case GL_MAX_PROGRAM_TEXEL_OFFSET:
+    case GL_MAX_SAMPLES:
+    case GL_MAX_TEXTURE_LOD_BIAS:
+    case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
+    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS:
+    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS:
+    case GL_MAX_UNIFORM_BLOCK_SIZE:
+    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
+    case GL_MAX_VARYING_COMPONENTS:
+    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
+    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
+    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MIN_PROGRAM_TEXEL_OFFSET:
     {
       // return an int
       GLint param;
@@ -4050,7 +4501,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     }
     case GL_VERSION:
     {
-      Local<Value> constructorName = info.This()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"));
+      Local<Value> constructorName = JS_OBJ(info.This()->Get(JS_STR("constructor")))->Get(JS_STR("name"));
       if (constructorName->StrictEquals(JS_STR("WebGL2RenderingContext"))) {
         info.GetReturnValue().Set(JS_STR("WebGL 2"));
       } else {
@@ -4063,11 +4514,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       // return a int32[2]
       GLint params[2];
       glGetIntegerv(name, params);
-
-      Local<Array> arr = Nan::New<Array>(2);
-      arr->Set(0,JS_INT(params[0]));
-      arr->Set(1,JS_INT(params[1]));
-      info.GetReturnValue().Set(arr);
+      info.GetReturnValue().Set(createTypedArray<Int32Array>(2, params));
       break;
     }
     case GL_SCISSOR_BOX:
@@ -4076,13 +4523,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       // return a int32[4]
       GLint params[4];
       glGetIntegerv(name, params);
-
-      Local<Array> arr = Nan::New<Array>(4);
-      arr->Set(0,JS_INT(params[0]));
-      arr->Set(1,JS_INT(params[1]));
-      arr->Set(2,JS_INT(params[2]));
-      arr->Set(3,JS_INT(params[3]));
-      info.GetReturnValue().Set(arr);
+      info.GetReturnValue().Set(createTypedArray<Int32Array>(4, params));
       break;
     }
     case GL_ALIASED_LINE_WIDTH_RANGE:
@@ -4092,11 +4533,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       // return a float[2]
       GLfloat params[2];
       glGetFloatv(name, params);
-
-      Local<Array> arr = Nan::New<Array>(2);
-      arr->Set(0,JS_FLOAT(params[0]));
-      arr->Set(1,JS_FLOAT(params[1]));
-      info.GetReturnValue().Set(arr);
+      info.GetReturnValue().Set(createTypedArray<Float32Array>(2, params));
       break;
     }
     case GL_BLEND_COLOR:
@@ -4105,13 +4542,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       // return a float[4]
       GLfloat params[4];
       glGetFloatv(name, params);
-
-      Local<Array> arr = Nan::New<Array>(4);
-      arr->Set(0,JS_FLOAT(params[0]));
-      arr->Set(1,JS_FLOAT(params[1]));
-      arr->Set(2,JS_FLOAT(params[2]));
-      arr->Set(3,JS_FLOAT(params[3]));
-      info.GetReturnValue().Set(arr);
+      info.GetReturnValue().Set(createTypedArray<Float32Array>(4, params));
       break;
     }
     case GL_COLOR_WRITEMASK:
@@ -4158,12 +4589,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
 
       unique_ptr<GLint[]> params(new GLint[numFormats]);
       glGetIntegerv(name, params.get());
-
-      Local<Array> arr = Nan::New<Array>(numFormats);
-      for (size_t i = 0; i < numFormats; i++) {
-        arr->Set(i, JS_INT(params[i]));
-      }
-      info.GetReturnValue().Set(arr);
+      info.GetReturnValue().Set(createTypedArray<Uint32Array>(numFormats, (uint32_t *)params.get()));
       break;
     }
     case UNPACK_FLIP_Y_WEBGL: {
@@ -4182,13 +4608,22 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       info.GetReturnValue().Set(JS_BOOL(gl->premultiplyAlpha));
       break;
     }
+    case MAX_CLIENT_WAIT_TIMEOUT_WEBGL:
+    case GL_MAX_SERVER_WAIT_TIMEOUT:
+    {
+      info.GetReturnValue().Set(JS_INT(0));
+      break;
+    }
+    case GL_MAX_ELEMENT_INDEX:
+    {
+      GLint64 elementIndex = -1;
+      glGetInteger64v(GL_MAX_ELEMENT_INDEX, &elementIndex);
+      info.GetReturnValue().Set(JS_INT((GLuint)elementIndex));
+      break;
+    }
     default: {
-      /* // return a long
-      GLint params;
-      glGetIntegerv(name, &params);
-
-      info.GetReturnValue().Set(JS_INT(params)); */
-      Nan::ThrowError("invalid arguments");
+      // Nan::ThrowError("WebGLRenderingContext::GetParameter: invalid parameter");
+      info.GetReturnValue().Set(Nan::Null());
       break;
     }
   }
@@ -4197,8 +4632,8 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetBufferParameter) {
-  GLenum target = info[0]->Int32Value();
-  GLenum pname = info[1]->Int32Value();
+  GLenum target = TO_INT32(info[0]);
+  GLenum pname = TO_INT32(info[1]);
   GLint params;
 
   glGetBufferParameteriv(target, pname, &params);
@@ -4207,9 +4642,9 @@ NAN_METHOD(WebGLRenderingContext::GetBufferParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetFramebufferAttachmentParameter) {
-  GLenum target = info[0]->Int32Value();
-  GLenum attachment = info[1]->Int32Value();
-  GLenum pname = info[2]->Int32Value();
+  GLenum target = TO_INT32(info[0]);
+  GLenum attachment = TO_INT32(info[1]);
+  GLenum pname = TO_INT32(info[2]);
   GLint params;
 
   glGetFramebufferAttachmentParameteriv(target,attachment, pname, &params);
@@ -4218,7 +4653,7 @@ NAN_METHOD(WebGLRenderingContext::GetFramebufferAttachmentParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetProgramInfoLog) {
-  GLuint program = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint program = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   char Error[1024];
   int Len;
 
@@ -4228,8 +4663,8 @@ NAN_METHOD(WebGLRenderingContext::GetProgramInfoLog) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetRenderbufferParameter) {
-  int target = info[0]->Int32Value();
-  int pname = info[1]->Int32Value();
+  int target = TO_INT32(info[0]);
+  int pname = TO_INT32(info[1]);
   int value;
 
   glGetRenderbufferParameteriv(target, pname, &value);
@@ -4238,8 +4673,8 @@ NAN_METHOD(WebGLRenderingContext::GetRenderbufferParameter) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetUniform) {
-  GLuint program = info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value();
-  GLuint location = info[1]->ToObject()->Get(JS_STR("id"))->Uint32Value();
+  GLuint program = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint location = TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id")));
 
   char name[1024];
   GLsizei length = 0;
@@ -4362,8 +4797,8 @@ NAN_METHOD(WebGLRenderingContext::GetUniform) {
 }
 
 NAN_METHOD(WebGLRenderingContext::GetVertexAttrib) {
-  GLuint index = info[0]->Int32Value();
-  GLuint pname = info[1]->Int32Value();
+  GLuint index = TO_INT32(info[0]);
+  GLuint pname = TO_INT32(info[1]);
   GLint value;
 
   switch (pname) {
@@ -4383,14 +4818,9 @@ NAN_METHOD(WebGLRenderingContext::GetVertexAttrib) {
       info.GetReturnValue().Set(JS_INT(value));
       break;
     case GL_CURRENT_VERTEX_ATTRIB: {
-      float vextex_attribs[4];
-      glGetVertexAttribfv(index, pname, vextex_attribs);
-      Local<Array> arr = Nan::New<Array>(4);
-      arr->Set(0,JS_FLOAT(vextex_attribs[0]));
-      arr->Set(1,JS_FLOAT(vextex_attribs[1]));
-      arr->Set(2,JS_FLOAT(vextex_attribs[2]));
-      arr->Set(3,JS_FLOAT(vextex_attribs[3]));
-      info.GetReturnValue().Set(arr);
+      float vertex_attribs[4];
+      glGetVertexAttribfv(index, pname, vertex_attribs);
+      info.GetReturnValue().Set(createTypedArray<Float32Array>(4, vertex_attribs));
       break;
     }
     default:
@@ -4452,7 +4882,7 @@ NAN_METHOD(WebGLRenderingContext::GetSupportedExtensions) {
 
 // TODO GetExtension(name) return the extension name if found, should be an object...
 NAN_METHOD(WebGLRenderingContext::GetExtension) {
-  String::Utf8Value name(info[0]);
+  Nan::Utf8String name(Local<String>::Cast(info[0]));
   char *sname = *name;
 
   if (
@@ -4593,8 +5023,20 @@ NAN_METHOD(WebGLRenderingContext::GetExtension) {
   }
 }
 
+NAN_METHOD(WebGLRenderingContext::GetContextAttributes) {
+  Local<Object> result = Object::New(Isolate::GetCurrent());
+  result->Set(JS_STR("alpha"), JS_BOOL(true));
+  result->Set(JS_STR("antialias"), JS_BOOL(true));
+  result->Set(JS_STR("depth"), JS_BOOL(true));
+  result->Set(JS_STR("failIfMajorPerformanceCaveat"), JS_BOOL(false));
+  result->Set(JS_STR("premultipliedAlpha"), JS_BOOL(true));
+  result->Set(JS_STR("preserveDrawingBuffer"), JS_BOOL(false));
+  result->Set(JS_STR("stencil"), JS_BOOL(false));
+  info.GetReturnValue().Set(result);
+}
+
 NAN_METHOD(WebGLRenderingContext::CheckFramebufferStatus) {
-  GLenum target = info[0]->Int32Value();
+  GLenum target = TO_INT32(info[0]);
   GLint ret = glCheckFramebufferStatus(target);
 
   info.GetReturnValue().Set(JS_INT(ret));
@@ -4610,7 +5052,7 @@ NAN_METHOD(WebGLRenderingContext::CreateVertexArray) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteVertexArray) {
-  GLuint vao = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : 0;
+  GLuint vao = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteVertexArrays(1, &vao);
 
@@ -4619,7 +5061,7 @@ NAN_METHOD(WebGLRenderingContext::DeleteVertexArray) {
 
 NAN_METHOD(WebGLRenderingContext::BindVertexArray) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLuint vao = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : gl->defaultVao;
+  GLuint vao = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : gl->defaultVao;
 
   glBindVertexArray(vao);
 
@@ -4630,7 +5072,7 @@ NAN_METHOD(WebGLRenderingContext::BindVertexArrayOES) {
   Local<Object> contextObj = Local<Object>::Cast(info.This()->Get(JS_STR("context")));
 
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(contextObj);
-  GLuint vao = info[0]->IsObject() ? info[0]->ToObject()->Get(JS_STR("id"))->Uint32Value() : gl->defaultVao;
+  GLuint vao = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : gl->defaultVao;
 
   glBindVertexArray(vao);
 
@@ -4638,8 +5080,8 @@ NAN_METHOD(WebGLRenderingContext::BindVertexArrayOES) {
 }
 
 NAN_METHOD(WebGLRenderingContext::FenceSync) {
-  GLenum condition = info[0]->Uint32Value();
-  GLbitfield flags = info[1]->Uint32Value();
+  GLenum condition = TO_UINT32(info[0]);
+  GLbitfield flags = TO_UINT32(info[1]);
 
   GLsync sync = (GLsync)glFenceSync(condition, flags);
   Local<Array> syncArray = pointerToArray(sync);
@@ -4650,17 +5092,17 @@ NAN_METHOD(WebGLRenderingContext::FenceSync) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteSync) {
-  Local<Array> syncArray = Local<Array>::Cast(info[0]->ToObject()->Get(JS_STR("id")));
+  Local<Array> syncArray = Local<Array>::Cast(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLsync sync = (GLsync)arrayToPointer(syncArray);
 
   glDeleteSync(sync);
 }
 
 NAN_METHOD(WebGLRenderingContext::ClientWaitSync) {
-  Local<Array> syncArray = Local<Array>::Cast(info[0]->ToObject()->Get(JS_STR("id")));
+  Local<Array> syncArray = Local<Array>::Cast(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLsync sync = (GLsync)arrayToPointer(syncArray);
-  GLbitfield flags = info[1]->Uint32Value();
-  double timeoutValue = info[2]->NumberValue();
+  GLbitfield flags = TO_UINT32(info[1]);
+  double timeoutValue = TO_DOUBLE(info[2]);
   GLint64 timeout = *(GLint64 *)(&timeoutValue);
 
   GLenum ret = glClientWaitSync(sync, flags, timeout);
@@ -4669,19 +5111,19 @@ NAN_METHOD(WebGLRenderingContext::ClientWaitSync) {
 }
 
 NAN_METHOD(WebGLRenderingContext::WaitSync) {
-  Local<Array> syncArray = Local<Array>::Cast(info[0]->ToObject()->Get(JS_STR("id")));
+  Local<Array> syncArray = Local<Array>::Cast(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLsync sync = (GLsync)arrayToPointer(syncArray);
-  GLbitfield flags = info[1]->Uint32Value();
-  double timeoutValue = info[2]->NumberValue();
+  GLbitfield flags = TO_UINT32(info[1]);
+  double timeoutValue = TO_DOUBLE(info[2]);
   GLint64 timeout = *(GLint64 *)(&timeoutValue);
 
   glWaitSync(sync, flags, timeout);
 }
 
 NAN_METHOD(WebGLRenderingContext::GetSyncParameter) {
-  Local<Array> syncArray = Local<Array>::Cast(info[0]->ToObject()->Get(JS_STR("id")));
+  Local<Array> syncArray = Local<Array>::Cast(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLsync sync = (GLsync)arrayToPointer(syncArray);
-  GLbitfield pname = info[1]->Uint32Value();
+  GLbitfield pname = TO_UINT32(info[1]);
 
   GLint result = 0;
   GLsizei len;
@@ -4705,7 +5147,37 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGL2RenderingContext::Initia
   ctor->InstanceTemplate()->SetInternalFieldCount(1);
   ctor->SetClassName(JS_STR("WebGL2RenderingContext"));
 
-  Local<Function> ctorFn = ctor->GetFunction();
+  // prototype
+  Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
+
+  Nan::SetMethod(proto, "createQuery", glCallWrap<CreateQuery>);
+  Nan::SetMethod(proto, "beginQuery", glCallWrap<BeginQuery>);
+  Nan::SetMethod(proto, "endQuery", glCallWrap<EndQuery>);
+  Nan::SetMethod(proto, "getQuery", glCallWrap<GetQuery>);
+  Nan::SetMethod(proto, "getQueryParameter", glCallWrap<GetQueryParameter>);
+  Nan::SetMethod(proto, "isQuery", glCallWrap<IsQuery>);
+  Nan::SetMethod(proto, "deleteQuery", glCallWrap<DeleteQuery>);
+
+  Nan::SetMethod(proto, "createTransformFeedback", glCallWrap<CreateTransformFeedback>);
+  Nan::SetMethod(proto, "deleteTransformFeedback", glCallWrap<DeleteTransformFeedback>);
+  Nan::SetMethod(proto, "isTransformFeedback", glCallWrap<IsTransformFeedback>);
+  Nan::SetMethod(proto, "bindTransformFeedback", glCallWrap<BindTransformFeedback>);
+  Nan::SetMethod(proto, "beginTransformFeedback", glCallWrap<BeginTransformFeedback>);
+  Nan::SetMethod(proto, "endTransformFeedback", glCallWrap<EndTransformFeedback>);
+  Nan::SetMethod(proto, "transformFeedbackVaryings", glCallWrap<TransformFeedbackVaryings>);
+  Nan::SetMethod(proto, "getTransformFeedbackVarying", glCallWrap<GetTransformFeedbackVarying>);
+  Nan::SetMethod(proto, "pauseTransformFeedback", glCallWrap<PauseTransformFeedback>);
+  Nan::SetMethod(proto, "resumeTransformFeedback", glCallWrap<ResumeTransformFeedback>);
+
+  Nan::SetMethod(proto, "createSampler", glCallWrap<CreateSampler>);
+  Nan::SetMethod(proto, "deleteSampler", glCallWrap<DeleteSampler>);
+  Nan::SetMethod(proto, "isSampler", glCallWrap<IsSampler>);
+  Nan::SetMethod(proto, "bindSampler", glCallWrap<BindSampler>);
+  Nan::SetMethod(proto, "samplerParameteri", glCallWrap<SamplerParameteri>);
+  Nan::SetMethod(proto, "samplerParameterf", glCallWrap<SamplerParameterf>);
+  Nan::SetMethod(proto, "getSamplerParameter", glCallWrap<GetSamplerParameter>);
+
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
   setGlConstants(ctorFn);
 
   return std::pair<Local<Object>, Local<FunctionTemplate>>(ctorFn, ctor);
@@ -4717,6 +5189,249 @@ NAN_METHOD(WebGL2RenderingContext::New) {
   gl2->Wrap(gl2Obj);
 
   info.GetReturnValue().Set(gl2Obj);
+}
+
+// reference used https://www.khronos.org/registry/OpenGL-Refpages/es3.0/
+NAN_METHOD(WebGL2RenderingContext::CreateQuery) { // adapted from CreateBuffer
+  GLuint queryId;
+  glGenQueries(1, &queryId);
+
+  Local<Object> queryObject = Nan::New<Object>();
+  queryObject->Set(JS_STR("id"), JS_INT(queryId));
+  info.GetReturnValue().Set(queryObject);
+}
+
+NAN_METHOD(WebGL2RenderingContext::BeginQuery) { // adapted from BindBuffer
+  GLenum target = TO_INT32(info[0]);
+  GLuint query = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
+
+  glBeginQuery(target, query);
+}
+
+NAN_METHOD(WebGL2RenderingContext::EndQuery) {
+  GLenum target = TO_INT32(info[0]);
+  glEndQuery(target);
+}
+
+NAN_METHOD(WebGL2RenderingContext::GetQuery) {
+  GLenum target = TO_INT32(info[0]);
+  GLenum pname = TO_INT32(info[1]);
+  GLint value;
+
+  glGetQueryiv(target, pname, &value);
+  if (glGetError() == GL_NO_ERROR) {
+    Local<Object> queryObject = Nan::New<Object>();
+    queryObject->Set(JS_STR("id"), JS_INT(value));
+
+    info.GetReturnValue().Set(queryObject);
+  }
+  else info.GetReturnValue().Set(Nan::Null());
+}
+
+NAN_METHOD(WebGL2RenderingContext::GetQueryParameter) { // adapted from GetProgramParameter
+  GLuint queryId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLenum pname = TO_INT32(info[1]);
+
+  switch (pname) {
+    case GL_QUERY_RESULT_AVAILABLE: {
+      GLuint value;
+      glGetQueryObjectuiv(queryId, pname, &value);
+      bool result = value != 0;
+      info.GetReturnValue().Set(JS_BOOL(result));
+      break;
+    }
+    case GL_QUERY_RESULT: {
+      GLuint value;
+      glGetQueryObjectuiv(queryId, pname, &value);
+      info.GetReturnValue().Set(JS_INT(value));
+      break;
+    }
+    default: {
+      Nan::ThrowTypeError("GetQueryParameter: Invalid Enum");
+      break;
+    }
+  }
+}
+
+NAN_METHOD(WebGL2RenderingContext::IsQuery) { // adapted from IsVertexArray
+  if (info[0]->IsObject()) {
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+    bool ret = glIsQuery(arg);
+
+    info.GetReturnValue().Set(JS_BOOL(ret));
+  } else {
+    info.GetReturnValue().Set(Nan::New<Boolean>(false));
+  }
+}
+
+NAN_METHOD(WebGL2RenderingContext::DeleteQuery) { // adapted from DeleteBuffer
+  GLuint query = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  glDeleteQueries(1, &query);
+}
+
+NAN_METHOD(WebGL2RenderingContext::CreateTransformFeedback) {
+  GLuint transformId;
+  glGenTransformFeedbacks(1, &transformId);
+
+  Local<Object> transformObject = Nan::New<Object>();
+  transformObject->Set(JS_STR("id"), JS_INT(transformId));
+  info.GetReturnValue().Set(transformObject);
+}
+
+NAN_METHOD(WebGL2RenderingContext::DeleteTransformFeedback) {
+  GLuint transform = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  glDeleteTransformFeedbacks(1, &transform);
+}
+
+NAN_METHOD(WebGL2RenderingContext::IsTransformFeedback) {
+  if (info[0]->IsObject()) {
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+    bool ret = glIsTransformFeedback(arg);
+
+    info.GetReturnValue().Set(JS_BOOL(ret));
+  } else {
+    info.GetReturnValue().Set(Nan::New<Boolean>(false));
+  }
+}
+
+NAN_METHOD(WebGL2RenderingContext::BindTransformFeedback) {
+  GLenum target = TO_INT32(info[0]);
+  GLuint transform = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
+
+  glBindTransformFeedback(target, transform);
+}
+
+NAN_METHOD(WebGL2RenderingContext::BeginTransformFeedback) {
+  GLenum primitiveMode = TO_INT32(info[0]);
+  glBeginTransformFeedback(primitiveMode);
+}
+
+NAN_METHOD(WebGL2RenderingContext::EndTransformFeedback) {
+  glEndTransformFeedback();
+}
+
+NAN_METHOD(WebGL2RenderingContext::TransformFeedbackVaryings) {
+  GLuint program = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+
+  Local<Array> jsVaryings = Local<Array>::Cast(info[1]);
+  GLsizei count = jsVaryings->Length();
+
+  char **varyings = new char*[count];
+
+  for (int i = 0; i < count; i++) {
+    Nan::Utf8String v(Local<String>::Cast(jsVaryings->Get(i)));
+    varyings[i] = *v;
+  }
+
+  GLenum bufferMode = TO_INT32(info[2]);
+
+  glTransformFeedbackVaryings(program, count, varyings, bufferMode);
+  delete [] varyings;
+}
+
+NAN_METHOD(WebGL2RenderingContext::GetTransformFeedbackVarying) {
+  GLuint program = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint index = TO_INT32(info[1]);
+
+  char name[1024];
+  GLsizei length = 0;
+  GLsizei size;
+  GLenum type;
+
+  glGetTransformFeedbackVarying(program, index, sizeof(name), &length, &size, &type, name);
+  if (length > 0) {
+    Local<Object> activeInfo = Nan::New<Object>();
+    activeInfo->Set(JS_STR("name"), JS_STR(name));
+    activeInfo->Set(JS_STR("size"), JS_INT(size));
+    activeInfo->Set(JS_STR("type"), JS_INT(type));
+
+    info.GetReturnValue().Set(activeInfo);
+  }
+  else info.GetReturnValue().Set(Nan::Null());
+}
+
+NAN_METHOD(WebGL2RenderingContext::PauseTransformFeedback) {
+  glPauseTransformFeedback();
+}
+
+NAN_METHOD(WebGL2RenderingContext::ResumeTransformFeedback) {
+  glResumeTransformFeedback();
+}
+
+NAN_METHOD(WebGL2RenderingContext::CreateSampler) {
+  GLuint samplerId;
+  glGenSamplers(1, &samplerId);
+
+  Local<Object> samplerObject = Nan::New<Object>();
+  samplerObject->Set(JS_STR("id"), JS_INT(samplerId));
+  info.GetReturnValue().Set(samplerObject);
+}
+
+NAN_METHOD(WebGL2RenderingContext::DeleteSampler) {
+  GLuint sampler = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  glDeleteSamplers(1, &sampler);
+}
+
+NAN_METHOD(WebGL2RenderingContext::IsSampler) {
+  if (info[0]->IsObject()) {
+    GLuint arg = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+    bool ret = glIsSampler(arg);
+
+    info.GetReturnValue().Set(JS_BOOL(ret));
+  } else {
+    info.GetReturnValue().Set(Nan::New<Boolean>(false));
+  }
+}
+
+NAN_METHOD(WebGL2RenderingContext::BindSampler) {
+  GLuint unit = TO_UINT32(info[0]);
+  GLuint sampler = TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id")));
+
+  glBindSampler(unit, sampler);
+}
+
+NAN_METHOD(WebGL2RenderingContext::SamplerParameteri) {
+  GLuint sampler = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLenum pname = TO_UINT32(info[1]);
+  GLint param = TO_INT32(info[2]);
+
+  glSamplerParameteri(sampler, pname, param);
+}
+
+NAN_METHOD(WebGL2RenderingContext::SamplerParameterf) {
+  GLuint sampler = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLenum pname = TO_INT32(info[1]);
+  GLfloat param = TO_FLOAT(info[2]);
+
+  glSamplerParameterf(sampler, pname, param);
+}
+
+NAN_METHOD(WebGL2RenderingContext::GetSamplerParameter) {
+  GLuint sampler = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLenum pname = TO_UINT32(info[1]);
+
+  switch (pname) {
+    case GL_TEXTURE_MIN_LOD:
+    case GL_TEXTURE_MAX_LOD:
+      GLfloat fValue;
+      glGetSamplerParameterfv(sampler, pname, &fValue);
+      info.GetReturnValue().Set(JS_FLOAT(fValue));
+      break;
+    case GL_TEXTURE_COMPARE_FUNC:
+    case GL_TEXTURE_COMPARE_MODE:
+    case GL_TEXTURE_MAG_FILTER:
+    case GL_TEXTURE_MIN_FILTER:
+    case GL_TEXTURE_WRAP_R:
+    case GL_TEXTURE_WRAP_S:
+    case GL_TEXTURE_WRAP_T:
+      GLint iValue;
+      glGetSamplerParameteriv(sampler, pname, &iValue);
+      info.GetReturnValue().Set(JS_INT(iValue));
+      break;
+  }
 }
 
 /* struct GLObj {

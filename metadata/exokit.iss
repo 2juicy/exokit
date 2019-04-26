@@ -1,8 +1,8 @@
-#define MyAppName "Exokit Browser"
+#define MyAppName "Exokit"
 #define MyAppShortName "Exokit"
 #define MyAppLCShortName "exokit"
-#define MyAppPublisher "WebMR"
-#define MyAppURL "https://github.com/webmixedreality/exokit"
+#define MyAppPublisher "exokitXR"
+#define MyAppURL "https://github.com/exokitxr/exokit"
 #define MyAppExeName "exokit.cmd"
 #define MyIcon "exokit.ico"
 #define ProjectRoot ".."
@@ -36,7 +36,7 @@ ChangesEnvironment=yes
 DisableProgramGroupPage=yes
 ArchitecturesInstallIn64BitMode=x64 ia64
 UninstallDisplayIcon={app}\metadata\{#MyIcon}
-AppCopyright=Copyright (c) 2018 WebMR
+AppCopyright=Copyright (c) 2019 Exokit
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -55,7 +55,7 @@ Root: HKCR; Subkey: "Exokit\shell\open\command"; ValueType: "string"; ValueData:
 
 [Icons]
 Name: "{group}\{#MyAppName}"; WorkingDir: "{%userprofile}"; Filename: "{app}\scripts\{#MyAppExeName}"; Parameters: "-h -l"; IconFilename: "{app}\metadata\{#MyIcon}"
-Name: "{group}\{#MyAppShortName} Engine CLI"; WorkingDir: "{%userprofile}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "-l"; IconFilename: "{app}\metadata\{#MyIcon}"
+Name: "{group}\{#MyAppShortName} Engine CLI"; WorkingDir: "{%userprofile}"; Filename: "{app}\scripts\{#MyAppExeName}"; Parameters: "-l"; IconFilename: "{app}\metadata\{#MyIcon}"
 Name: "{group}\Uninstall {#MyAppShortName}"; Filename: "{uninstallexe}"
 
 [Code]

@@ -1,8 +1,11 @@
 #!/bin/bash
 
-export MLSDK=${MLSDK:-/mnt/c/Users/avaer/MagicLeap/mlsdk/v0.16.0}
-export MLSDK_WIN=$(echo "$MLSDK" | sed 's/^\/mnt\/c\//C:\\/' | sed 's/\//\\/g')
+set -e
 
-cmd.exe /c "$MLSDK_WIN/tools/mldb/mldb.exe" terminate -f com.webmr.exokit
-cmd.exe /c "$MLSDK_WIN/tools/mldb/mldb.exe" launch com.webmr.exokit -v "ARGS=node . $@"
+cd "$(dirname "$0")"
+
+source ./version-ml.sh
+
+cmd.exe /c "$MLSDK_WIN/tools/mldb/mldb.exe" terminate -f com.webmr.exokit || true
+cmd.exe /c "$MLSDK_WIN/tools/mldb/mldb.exe" launch com.webmr.exokit -v "ARGS=node --experimental-worker . $@"
 cmd.exe /c "$MLSDK_WIN/tools/mldb/mldb.exe" log exokit:*

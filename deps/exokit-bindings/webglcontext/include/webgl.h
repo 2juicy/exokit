@@ -10,7 +10,24 @@
 
 #include <nan.h>
 
-#if defined(_WIN32)
+#if defined(ANDROID) || defined(LUMIN)
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+#endif
+#include <GLES3/gl32.h>
+#include <GLES2/gl2ext.h>
+#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT 0x83F0
+#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#define GL_COMPRESSED_SRGB_S3TC_DXT1_EXT 0x8C4C
+#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT 0x8C4D
+#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT 0x8C4E
+#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT 0x8C4F
+#define GL_ETC1_RGB8_OES 0x8D64
+#define GL_VERTEX_PROGRAM_POINT_SIZE 0x8642
+
+#elif defined(_WIN32)
 #include <GL/glew.h>
 #include <GLES2/gl2platform.h>
 #include <GLES2/gl2ext.h>
@@ -38,28 +55,11 @@
 #error "Unknown Apple platform"
 #endif
 
-#elif defined(LUMIN)
-#include <GLES3/gl32.h>
-#include <GLES2/gl2ext.h>
-#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT 0x83F0
-#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
-#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
-#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
-#define GL_COMPRESSED_SRGB_S3TC_DXT1_EXT 0x8C4C
-#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT 0x8C4D
-#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT 0x8C4E
-#define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT 0x8C4F
-#define GL_ETC1_RGB8_OES 0x8D64
-#define GL_VERTEX_PROGRAM_POINT_SIZE 0x8642
-
 #elif defined(__linux__)
 #include <GL/glew.h>
 #include <GLES2/gl2platform.h>
 #include <GLES2/gl2ext.h>
 
-#elif defined(__ANDROID__)
-#include <GLES3/gl3.h>
-#include <GLES2/gl2ext.h>
 #endif
 
 #define UNPACK_FLIP_Y_WEBGL 0x9240
@@ -71,7 +71,7 @@
 
 #include <defines.h>
 
-#ifndef LUMIN
+#if !defined(ANDROID) && !defined(LUMIN)
 #include <glfw/include/glfw.h>
 #else
 #include <egl/include/egl.h>
@@ -79,6 +79,11 @@
 
 using namespace v8;
 using namespace node;
+
+enum GlKey {
+  GL_KEY_COMPOSE,
+  GL_KEY_PLANE,
+};
 
 void flipImageData(char *dstData, char *srcData, size_t width, size_t height, size_t pixelSize);
 
@@ -196,6 +201,7 @@ public:
   static NAN_METHOD(BindBufferBase);
   static NAN_METHOD(CreateFramebuffer);
   static NAN_METHOD(BindFramebuffer);
+  static NAN_METHOD(BindFramebufferRaw);
   static NAN_METHOD(FramebufferTexture2D);
   static NAN_METHOD(BlitFramebuffer);
   static NAN_METHOD(BufferData);
@@ -300,6 +306,8 @@ public:
   static NAN_METHOD(GetVertexAttrib);
   static NAN_METHOD(GetSupportedExtensions);
   static NAN_METHOD(GetExtension);
+  static NAN_METHOD(GetContextAttributes);
+  
   static NAN_METHOD(CheckFramebufferStatus);
 
   static NAN_METHOD(CreateVertexArray);
@@ -320,6 +328,7 @@ public:
   static NAN_GETTER(DrawingBufferWidthGetter);
   static NAN_GETTER(DrawingBufferHeightGetter);
 
+  static NAN_METHOD(GetFramebuffer);
   static NAN_METHOD(SetDefaultFramebuffer);
 
   void SetVertexArrayBinding(GLuint vao) {
@@ -400,6 +409,7 @@ public:
   std::map<GLenum, GLuint> programBindings;
   ViewportState viewportState;
   ColorMaskState colorMaskState;
+  std::map<GlKey, void *> keys;
 };
 
 class WebGL2RenderingContext : public WebGLRenderingContext {
@@ -410,6 +420,33 @@ public:
   static std::pair<Local<Object>, Local<FunctionTemplate>> Initialize(Isolate *isolate, Local<FunctionTemplate> baseCtor);
 
   static NAN_METHOD(New);
+  
+  static NAN_METHOD(CreateQuery);
+  static NAN_METHOD(BeginQuery);
+  static NAN_METHOD(EndQuery);
+  static NAN_METHOD(GetQuery);
+  static NAN_METHOD(GetQueryParameter);
+  static NAN_METHOD(IsQuery);
+  static NAN_METHOD(DeleteQuery);
+  
+  static NAN_METHOD(CreateTransformFeedback);
+  static NAN_METHOD(DeleteTransformFeedback);
+  static NAN_METHOD(IsTransformFeedback);
+  static NAN_METHOD(BindTransformFeedback);
+  static NAN_METHOD(BeginTransformFeedback);
+  static NAN_METHOD(EndTransformFeedback);
+  static NAN_METHOD(TransformFeedbackVaryings);
+  static NAN_METHOD(GetTransformFeedbackVarying);
+  static NAN_METHOD(PauseTransformFeedback);
+  static NAN_METHOD(ResumeTransformFeedback);
+  
+  static NAN_METHOD(CreateSampler);
+  static NAN_METHOD(DeleteSampler);
+  static NAN_METHOD(IsSampler);
+  static NAN_METHOD(BindSampler);
+  static NAN_METHOD(SamplerParameteri);
+  static NAN_METHOD(SamplerParameterf);
+  static NAN_METHOD(GetSamplerParameter);
 };
 
 #endif

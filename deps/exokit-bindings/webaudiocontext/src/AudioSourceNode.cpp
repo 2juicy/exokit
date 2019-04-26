@@ -6,7 +6,7 @@ AudioSourceNode::AudioSourceNode() {}
 
 AudioSourceNode::~AudioSourceNode() {}
 
-Handle<Object> AudioSourceNode::Initialize(Isolate *isolate) {
+Local<Object> AudioSourceNode::Initialize(Isolate *isolate) {
   Nan::EscapableHandleScope scope;
 
   // constructor
@@ -19,7 +19,7 @@ Handle<Object> AudioSourceNode::Initialize(Isolate *isolate) {
   AudioNode::InitializePrototype(proto);
   AudioSourceNode::InitializePrototype(proto);
 
-  Local<Function> ctorFn = ctor->GetFunction();
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
 
   return scope.Escape(ctorFn);
 }
@@ -29,16 +29,16 @@ void AudioSourceNode::InitializePrototype(Local<ObjectTemplate> proto) {
 }
 
 NAN_METHOD(AudioSourceNode::New) {
-  Nan::HandleScope scope;
+  // Nan::HandleScope scope;
 
-  if (info[1]->IsObject() && info[1]->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"))->StrictEquals(JS_STR("AudioContext"))) {
+  if (info[1]->IsObject() && JS_OBJ(JS_OBJ(info[1])->Get(JS_STR("constructor")))->Get(JS_STR("name"))->StrictEquals(JS_STR("AudioContext"))) {
     Local<Object> audioContextObj = Local<Object>::Cast(info[1]);
 
-    if (info[0]->IsObject() && info[0]->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"))->StrictEquals(JS_STR("HTMLAudioElement"))) {
+    if (info[0]->IsObject() && JS_OBJ(JS_OBJ(info[0])->Get(JS_STR("constructor")))->Get(JS_STR("name"))->StrictEquals(JS_STR("HTMLAudioElement"))) {
       Local<Object> htmlAudioElement = Local<Object>::Cast(info[0]);
       Local<Value> audioValue = htmlAudioElement->Get(JS_STR("audio"));
 
-      if (audioValue->BooleanValue() && audioValue->IsObject() && audioValue->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"))->StrictEquals(JS_STR("Audio"))) {
+      if (TO_BOOL(audioValue) && audioValue->IsObject() && JS_OBJ(JS_OBJ(audioValue)->Get(JS_STR("constructor")))->Get(JS_STR("name"))->StrictEquals(JS_STR("Audio"))) {
         Audio *audio = ObjectWrap::Unwrap<Audio>(Local<Object>::Cast(audioValue));
 
         AudioSourceNode *audioSourceNode = new AudioSourceNode();
@@ -52,8 +52,22 @@ NAN_METHOD(AudioSourceNode::New) {
       } else {
         Nan::ThrowError("AudioSourceNode: invalid audio element state");
       }
-    } else if (info[0]->IsObject() && info[0]->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"))->StrictEquals(JS_STR("MicrophoneMediaStream"))) {
-      Local<Object> microphoneMediaStreamObj = Local<Object>::Cast(info[0]);
+    } else if (info[0]->IsObject() && JS_OBJ(JS_OBJ(info[0])->Get(JS_STR("constructor")))->Get(JS_STR("name"))->StrictEquals(JS_STR("MicrophoneMediaStream"))) {
+      AudioSourceNode *audioSourceNode = new AudioSourceNode();
+      Local<Object> audioSourceNodeObj = info.This();
+      audioSourceNode->Wrap(audioSourceNodeObj);
+      
+      audioSourceNode->context.Reset(audioContextObj);
+  
+      AudioContext *audioContext = ObjectWrap::Unwrap<AudioContext>(Local<Object>::Cast(audioContextObj));
+      {
+        lab::ContextRenderLock r(audioContext->audioContext.get(), "AudioSourceNode::New");
+        audioSourceNode->audioNode = lab::MakeHardwareSourceNode(r);
+      }
+      
+      info.GetReturnValue().Set(audioSourceNodeObj);
+
+      /* Local<Object> microphoneMediaStreamObj = Local<Object>::Cast(info[0]);
       MicrophoneMediaStream *microphoneMediaStream = ObjectWrap::Unwrap<MicrophoneMediaStream>(Local<Object>::Cast(microphoneMediaStreamObj));
 
       if (microphoneMediaStream->audioNode) {
@@ -67,7 +81,7 @@ NAN_METHOD(AudioSourceNode::New) {
         info.GetReturnValue().Set(audioSourceNodeObj);
       } else {
         Nan::ThrowError("AudioSourceNode: media stream is not live");
-      }
+      } */
     } else {
       Nan::ThrowError("AudioSourceNode: invalid media element");
     }

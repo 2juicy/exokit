@@ -1,5 +1,5 @@
 node_modules
-build
+/build
 package-lock.json
 CMakeFiles
 CMakeCache.txt
@@ -8,3 +8,4 @@ CMakeCache.txt
 .exokit_history
 .localStorage
 .node-gyp
+/app

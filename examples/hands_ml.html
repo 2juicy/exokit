@@ -1,31 +1,31 @@
 <html>
   <head>
-    <style>
-      body {
-        margin: 0;
-      }
-    </style>
+   <meta charset="utf-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <meta name="theme-color" content="#008000"/>
+   <title>hands_ml</title>
+   <link rel="manifest" href="hands_ml_manifest.json">
+   <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/hands_ml_sw.js')
+        .then(function() {
+              console.log('Service Worker Registered');
+        });
+    }
+   </script>
+   <style>
+     body {
+       margin: 0;
+     }
+   </style>
   </head>
   <body>
+  <h1>hands_ml.html example</h1> 
   <script src="three.js"></script>
   <script>
     let container, scene, camera, display;
-
-    /* const controllerGeometry = new THREE.BoxBufferGeometry(0.1, 0.2, 0.01);
-    const controllerMaterial = new THREE.MeshPhongMaterial({
-      color: 0x4caf50,
-    });
-    const _makeControllerMesh = (x = 0, y = 0, z = 0, qx = 0, qy = 0, qz = 0, qw = 1) => {
-      const mesh = new THREE.Mesh(controllerGeometry, controllerMaterial);
-      mesh.position.set(x, y, z);
-      mesh.quaternion.set(qx, qy, qz, qw);
-      // mesh.matrix.compose(mesh.position, mesh.quaternion, mesh.scale);
-      mesh.updateMatrix();
-      mesh.updateMatrixWorld();
-      mesh.matrixAutoUpdate = false;
-      mesh.frustumCulled = false;
-      return mesh;
-    }; */
+    let handTracker;
 
     function init() {
       container = document.createElement('div');
@@ -157,6 +157,7 @@
             const hand = hands[i];
             const {pointer, grip, wrist, fingers} = hand;
             const allFingers = [wrist].concat(fingers);
+
             for (let j = 0; j < allFingers.length; j++) {
               const bones = allFingers[j];
               for (let k = 0; k < bones.length; k++) {
@@ -182,11 +183,12 @@
             if (pointer) {
               const newGeometry = pointerGeometry.clone()
                 .applyMatrix(
-                  localMatrix.compose(
-                    localVector.fromArray(pointer.position),
-                    localQuaternion.fromArray(pointer.rotation),
-                    localVector2.set(1, 1, 1),
-                  )
+                  localMatrix
+                    .compose(
+                      localVector.fromArray(pointer.position),
+                      localQuaternion.fromArray(pointer.rotation),
+                      localVector2.set(1, 1, 1),
+                    )
                 );
 
               _shiftIndex(newGeometry.index.array);
@@ -201,11 +203,12 @@
             if (grip) {
               const newGeometry = pointerGeometry.clone()
                 .applyMatrix(
-                  localMatrix.compose(
-                    localVector.fromArray(grip.position),
-                    localQuaternion.fromArray(grip.rotation),
-                    localVector2.set(1, 1, 1),
-                  )
+                  localMatrix
+                    .compose(
+                      localVector.fromArray(grip.position),
+                      localQuaternion.fromArray(grip.rotation),
+                      localVector2.set(1, 1, 1),
+                    )
                 );
 
               _shiftIndex(newGeometry.index.array);
@@ -245,7 +248,7 @@
                 .copy(pinchedObjectStart.rotation)
                 .inverse()
                 .premultiply(localQuaternion.fromArray(handSpec.rotation));
-              pinchedObject.matrix.compose(pinchedObject.position, pinchedObject.quaternion, pinchedObject.scale);
+              pinchedObject.matrix.compose(pinchedObject.position, pinchedObject.quaternion, pinchedObject.scale)
               pinchedObject.updateMatrixWorld(true);
             }
           }
@@ -296,7 +299,7 @@
         lastPincheds[handIndex] = pinched;
       };
 
-      const handTracker = window.browser.magicleap.RequestHandTracking();
+      handTracker = window.browser.magicleap.RequestHandTracking();
       handTracker.onhands = _onHands;
       handTracker.ongesture = _onGesture;
       handMesh.visible = true;
@@ -317,19 +320,6 @@
     }
 
     function animate(time, frame) {
-      /* if (renderer.vr.enabled) {
-        const inputSources = display.session.getInputSources();
-
-        for (let i = 0; i < inputSources.length; i++) {
-          const inputSource = inputSources[i];
-          const pose = frame.getInputPose(inputSource);
-
-          const controllerMesh = controllerMeshes[i];
-          controllerMesh.matrix.fromArray(pose.pointerMatrix);
-          controllerMesh.updateMatrixWorld(true);
-        }
-      } */
-
       renderer.render(scene, renderer.vr.enabled ? renderer.vr.getCamera(camera) : camera);
     }
 
@@ -343,18 +333,6 @@
         exclusive: true,
       });
       display.session = session;
-
-      /* session.onselect = e => {
-        const controllerIndex = e.inputSource.handedness === 'left' ? 0 : 1;
-        const controllerMesh = controllerMeshes[controllerIndex];
-        controllerMesh.matrixWorld.decompose(controllerMesh.position, controllerMesh.quaternion, controllerMesh.scale);
-
-        const objectMesh = _makeControllerMesh(
-          controllerMesh.position.x, controllerMesh.position.y, controllerMesh.position.z,
-          controllerMesh.quaternion.x, controllerMesh.quaternion.y, controllerMesh.quaternion.z, controllerMesh.quaternion.w,
-        );
-        scene.add(objectMesh);
-      }; */
 
       // console.log('request first frame');
       session.requestAnimationFrame((timestamp, frame) => {

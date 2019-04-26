@@ -7,7 +7,7 @@ AnalyserNode::AnalyserNode() {}
 
 AnalyserNode::~AnalyserNode() {}
 
-Handle<Object> AnalyserNode::Initialize(Isolate *isolate) {
+Local<Object> AnalyserNode::Initialize(Isolate *isolate) {
   Nan::EscapableHandleScope scope;
 
   // constructor
@@ -20,7 +20,7 @@ Handle<Object> AnalyserNode::Initialize(Isolate *isolate) {
   AudioNode::InitializePrototype(proto);
   AnalyserNode::InitializePrototype(proto);
 
-  Local<Function> ctorFn = ctor->GetFunction();
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
 
   return scope.Escape(ctorFn);
 }
@@ -40,7 +40,7 @@ void AnalyserNode::InitializePrototype(Local<ObjectTemplate> proto) {
 NAN_METHOD(AnalyserNode::New) {
   Nan::HandleScope scope;
 
-  if (info[0]->IsObject() && info[0]->ToObject()->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("name"))->StrictEquals(JS_STR("AudioContext"))) {
+  if (info[0]->IsObject() && JS_OBJ(JS_OBJ(info[0])->Get(JS_STR("constructor")))->Get(JS_STR("name"))->StrictEquals(JS_STR("AudioContext"))) {
     Local<Object> audioContextObj = Local<Object>::Cast(info[0]);
 
     AnalyserNode *analyserNode = new AnalyserNode();
@@ -72,38 +72,12 @@ NAN_SETTER(AnalyserNode::FftSizeSetter) {
 
   if (value->IsNumber()) {
     AnalyserNode *analyserNode = ObjectWrap::Unwrap<AnalyserNode>(info.This());
-    shared_ptr<lab::AudioNode> oldAudioNode = analyserNode->audioNode;
-
-    unsigned int newValue = value->Uint32Value();
-    shared_ptr<lab::AudioNode> newAudioNode = make_shared<lab::AnalyserNode>(newValue);
-
-    shared_ptr<lab::AudioNodeInput> oldSrc = oldAudioNode->input(0);
-    if (oldSrc && oldSrc->node()) {
-      shared_ptr<lab::AudioNode> oldSrcNode(oldSrc->node(), shared_ptr_release_deleter<lab::AudioNode>());
-
-      size_t oldSrcOutputIndex = 0;
-      size_t numSrcOutputs = oldSrc->node()->numberOfOutputs();
-      for (size_t i = 0; i < numSrcOutputs; i++) {
-        if (oldSrcNode->output(i)->node() == oldAudioNode.get()) {
-          oldSrcOutputIndex = i;
-          break;
-        }
-      }
-      getDefaultAudioContext()->connect(newAudioNode, oldSrcNode, 0, oldSrcOutputIndex);
-    }
-    shared_ptr<lab::AudioNodeOutput> oldDst = oldAudioNode->output(0);
-    if (oldDst && oldDst->node()) {
-      shared_ptr<lab::AudioNode> oldDstNode(oldDst->node(), shared_ptr_release_deleter<lab::AudioNode>());
-
-      size_t oldDstInputIndex = 0;
-      size_t numDstOutputs = oldDst->node()->numberOfOutputs();
-      for (size_t i = 0; i < numDstOutputs; i++) {
-        if (oldDstNode->input(i)->node() == oldAudioNode.get()) {
-          oldDstInputIndex = i;
-          break;
-        }
-      }
-      getDefaultAudioContext()->connect(oldDstNode, newAudioNode, oldDstInputIndex, 0);
+    shared_ptr<lab::AnalyserNode> labAnalyserNode = *(shared_ptr<lab::AnalyserNode> *)(&analyserNode->audioNode);
+    Local<Object> audioContextObj = Nan::New(analyserNode->context);
+    AudioContext *audioContext = ObjectWrap::Unwrap<AudioContext>(audioContextObj);
+    {
+      lab::ContextRenderLock lock(audioContext->audioContext.get(), "AnalyserNode::FftSizeSetter");
+      labAnalyserNode->setFFTSize(lock, TO_UINT32(value));
     }
   } else {
     Nan::ThrowError("value: invalid arguments");

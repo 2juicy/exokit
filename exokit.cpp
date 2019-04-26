@@ -12,6 +12,13 @@
 #ifdef OPENVR
 #include <openvr-bindings.h>
 #endif
+#ifdef ANDROID
+#include <oculus-mobile.h>
+#endif
+
+#ifdef OCULUSVR
+#include <oculus-bindings.h>
+#endif
 
 using namespace v8;
 
@@ -32,11 +39,11 @@ void callFunction(const char *funcname, const int argc, Local<Value> argv[]) {
 
   // call function, 'this' points to global object
   TryCatch try_catch(Isolate::GetCurrent());
-  Local<Value> result = jsfunc->Call(global, argc, argv);
+  Local<Value> result = jsfunc->Call(Isolate::GetCurrent()->GetCurrentContext(), global, argc, argv).ToLocalChecked();
 
   if (result.IsEmpty()) {
-    String::Utf8Value error(try_catch.Exception());
-    String::Utf8Value stacktrace(try_catch.StackTrace());
+    Nan::Utf8String error(try_catch.Exception());
+    Nan::Utf8String stacktrace(try_catch.StackTrace(localContext).ToLocalChecked());
     // LOGI("Error calling %s: %s:\n%s",funcname,*error,*stacktrace);
   } else {
     // LOGI("%s called",funcname);
@@ -54,8 +61,8 @@ void Java_com_mafintosh_nodeonandroid_NodeService_onResize
     unsigned int width = 1;
     unsigned int height = 1;
 
-    Handle<Number> js_width = v8::Integer::New(Isolate::GetCurrent(), width);
-    Handle<Number> js_height = v8::Integer::New(Isolate::GetCurrent(), height);
+    Local<Number> js_width = v8::Integer::New(Isolate::GetCurrent(), width);
+    Local<Number> js_height = v8::Integer::New(Isolate::GetCurrent(), height);
 
     Local<Value> argv[] = {js_width, js_height};
     callFunction("onResize", sizeof(argv)/sizeof(argv[0]), argv);
@@ -141,7 +148,7 @@ void Java_com_mafintosh_nodeonandroid_NodeService_onDrawFrame
   }
 }
 
-void InitExports(Handle<Object> exports) {
+void InitExports(Local<Object> exports) {
   std::pair<Local<Value>, Local<FunctionTemplate>> glResult = makeGl();
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeGl"), glResult.first);
 
@@ -175,6 +182,14 @@ void InitExports(Handle<Object> exports) {
   Local<Value> video = makeVideo(imageData);
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeVideo"), video);
 
+#if !defined(ANDROID)
+  Local<Value> browser = makeBrowser();
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeBrowser"), browser);
+#endif
+
+  Local<Value> rtc = makeRtc();
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeRtc"), rtc);
+
   /* Local<Value> glfw = makeGlfw();
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeGlfw"), glfw); */
 
@@ -182,8 +197,13 @@ void InitExports(Handle<Object> exports) {
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeWindow"), window);
 
 #ifdef OPENVR
-  Local<Value> vr = makeVr();
-  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeVr"), vr);
+  Local<Value> vr = makeOpenVR();
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeOpenVR"), vr);
+#endif
+
+#ifdef OCULUSVR
+  Local<Value> oculusVR = makeOculusVR();
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeOculusVR"), oculusVR);
 #endif
 
 #if LEAPMOTION
@@ -191,17 +211,24 @@ void InitExports(Handle<Object> exports) {
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeLm"), lm);
 #endif
 
+#ifdef ANDROID
+  Local<Value> oculusMobileVr = makeOculusMobileVr();
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeOculusMobileVr"), oculusMobileVr);
+#endif
+
 #if defined(LUMIN)
   Local<Value> ml = makeMl();
   exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeMl"), ml);
 #endif
 
-#ifndef LUMIN
-#define NATIVE_ANALYTICS true
+#if defined(ANDROID)
+#define NATIVE_PLATFORM "android"
+#elif defined(LUMIN)
+#define NATIVE_PLATFORM "lumin"
 #else
-#define NATIVE_ANALYTICS false
+#define NATIVE_PLATFORM ""
 #endif
-  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativeAnalytics"), JS_BOOL(NATIVE_ANALYTICS));
+  exports->Set(v8::String::NewFromUtf8(Isolate::GetCurrent(), "nativePlatform"), JS_STR(NATIVE_PLATFORM));
 
   uintptr_t initFunctionAddress = (uintptr_t)InitExports;
   Local<Array> initFunctionAddressArray = Nan::New<Array>(2);
@@ -210,15 +237,13 @@ void InitExports(Handle<Object> exports) {
   exports->Set(JS_STR("initFunctionAddress"), initFunctionAddressArray);
 }
 
-void Init(Handle<Object> exports) {
-  canvas::ImageData::setFlip(true);
-
+void Init(Local<Object> exports) {
   InitExports(exports);
 }
 
 }
 
-#ifndef LUMIN
+#if !defined(ANDROID) && !defined(LUMIN)
 NODE_MODULE(NODE_GYP_MODULE_NAME, exokit::Init)
 #else
 extern "C" {

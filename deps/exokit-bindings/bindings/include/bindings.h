@@ -13,6 +13,11 @@
 #include <webgl.h>
 #include <AudioContext.h>
 #include <Video.h>
+#include <webrtc.h>
+// Stub out on Android for now until get libcef working on Android.
+#if !defined(ANDROID)
+  #include <browser.h>
+#endif
 #if _WIN32
 #include <leapmotion.h>
 #endif
@@ -31,5 +36,7 @@ Local<Object> makeCanvasGradient();
 Local<Object> makeCanvasPattern();
 Local<Object> makeAudio();
 Local<Object> makeVideo(Local<Value> imageDataCons);
+Local<Object> makeBrowser();
+Local<Object> makeRtc();
 
 #endif

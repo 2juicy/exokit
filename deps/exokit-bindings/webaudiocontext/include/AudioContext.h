@@ -20,6 +20,7 @@
 #include <AudioListener.h>
 #include <MediaStreamTrack.h>
 #include <MicrophoneMediaStream.h>
+#include <AudioDestinationGenericImpl.h>
 
 using namespace std;
 using namespace v8;
@@ -31,7 +32,7 @@ lab::AudioContext *getDefaultAudioContext(float sampleRate = lab::DefaultSampleR
 
 class AudioContext : public ObjectWrap {
 public:
-  static Handle<Object> Initialize(Isolate *isolate, Local<Value> audioListenerCons, Local<Value> audioSourceNodeCons, Local<Value> audioDestinationNodeCons, Local<Value> gainNodeCons, Local<Value> analyserNodeCons, Local<Value> pannerNodeCons, Local<Value> audioBufferCons, Local<Value> audioBufferSourceNodeCons, Local<Value> audioProcessingEventCons, Local<Value> stereoPannerNodeCons, Local<Value> oscillatorNodeCons, Local<Value> scriptProcessorNodeCons, Local<Value> mediaStreamTrackCons, Local<Value> microphoneMediaStreamCons);
+  static Local<Object> Initialize(Isolate *isolate, Local<Value> audioListenerCons, Local<Value> audioSourceNodeCons, Local<Value> audioDestinationNodeCons, Local<Value> gainNodeCons, Local<Value> analyserNodeCons, Local<Value> pannerNodeCons, Local<Value> audioBufferCons, Local<Value> audioBufferSourceNodeCons, Local<Value> audioProcessingEventCons, Local<Value> stereoPannerNodeCons, Local<Value> oscillatorNodeCons, Local<Value> scriptProcessorNodeCons, Local<Value> mediaStreamTrackCons, Local<Value> microphoneMediaStreamCons);
   void Close();
   Local<Object> CreateMediaElementSource(Local<Function> audioDestinationNodeConstructor, Local<Object> mediaElement, Local<Object> audioContextObj);
   Local<Object> CreateMediaStreamSource(Local<Function> audioSourceNodeConstructor, Local<Object> mediaStream, Local<Object> audioContextObj);
@@ -49,7 +50,6 @@ public:
   void Suspend();
   void Resume();
 
-protected:
   static NAN_METHOD(New);
   static NAN_METHOD(Close);
   static NAN_METHOD(_DecodeAudioDataSync);
@@ -73,8 +73,8 @@ protected:
   AudioContext(float sampleRate);
   ~AudioContext();
 
-protected:
-  lab::AudioContext *audioContext;
+// protected:
+  std::unique_ptr<lab::AudioContext> audioContext;
 
   friend class Audio;
   friend class AudioListener;
@@ -88,12 +88,12 @@ protected:
   friend class ScriptProcessorNode;
 };
 
+void QueueOnMainThread(lab::ContextRenderLock &r, function<void()> &&newThreadFn);
+void RunInMainThread(uv_async_t *handle);
+
 extern function<void()> threadFn;
 extern uv_async_t threadAsync;
 extern uv_sem_t threadSemaphore;
-extern bool threadInitialized;
-void QueueOnMainThread(lab::ContextRenderLock &r, function<void()> &&newThreadFn);
-void RunInMainThread(uv_async_t *handle);
 
 }
 

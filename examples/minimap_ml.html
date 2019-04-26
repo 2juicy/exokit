@@ -1,5 +1,19 @@
 <html>
   <head>
+   <meta charset="utf-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <meta name="theme-color" content="#008000"/>
+   <title>minimap_ml</title>
+   <link rel="manifest" href="minimap_ml_manifest.json">
+   <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/minimap_ml_sw.js')
+        .then(function() {
+              console.log('Service Worker Registered');
+        });
+    }
+   </script>
     <style>
       body {
         margin: 0;
@@ -7,27 +21,33 @@
     </style>
   </head>
   <body>
+  <h1>minimap_ml</h1>
   <script src="three.js"></script>
   <script>
-    let container, scene, camera, renderer, display, rayMeshes, planeMesh, containerMesh;
+    let container, scene, camera, renderer, display, controllerMeshes, rayMeshes, planeMesh, containerMesh;
     let intersectScene, intersectCamera, renderTarget, terrainMeshes;
     let mesher = null;
 
     const controllerGeometry = new THREE.BoxBufferGeometry(0.1, 0.2, 0.01);
     const controllerMaterial = new THREE.MeshPhongMaterial({
-      color: 0x4caf50,
+      color: 0xFF0000,
     });
-    const _makeControllerMesh = (x = 0, y = 0, z = 0, qx = 0, qy = 0, qz = 0, qw = 1) => {
+    const _makeControllerMesh = () => {
       const mesh = new THREE.Mesh(controllerGeometry, controllerMaterial);
-      mesh.position.set(x, y, z);
-      mesh.quaternion.set(qx, qy, qz, qw);
-      // mesh.matrix.compose(mesh.position, mesh.quaternion, mesh.scale);
-      mesh.updateMatrix();
+      mesh.position.set(i === 0 ? -0.1 : 0.1, 0, -0.1);
+      mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1),
+        new THREE.Vector3(0, -1, -1)
+      );
       mesh.updateMatrixWorld();
       mesh.matrixAutoUpdate = false;
       mesh.frustumCulled = false;
       return mesh;
     };
+    const _getControllerIndex = inputSource => inputSource.handedness === 'left' ? 0 : 1;
+
+    const localMatrix = new THREE.Matrix4();
+    const localFloat32Array = new Float32Array(16);
 
     function init() {
       container = document.createElement('div');
@@ -49,28 +69,23 @@
       directionalLight.position.set(1, 1, 1);
       scene.add(directionalLight);
 
-      /* (() => {
-        const geometry = new THREE.BoxBufferGeometry(0.1, 1, 0.1);
-        const material = new THREE.MeshPhongMaterial({
-          color: 0xE91E63,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.y = 0.5;
-        // mesh.position.z = -1;
-        mesh.frustumCuled = false;
-        scene.add(mesh);
-      })();
-      (() => {
-        const geometry = new THREE.BoxBufferGeometry(0.1, 0.1, 0.1);
-        const material = new THREE.MeshPhongMaterial({
-          color: 0x4CAF50,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.y = 1 + 0.1;
-        // mesh.position.z = -1;
-        mesh.frustumCulled = false;
-        scene.add(mesh);
-      })(); */
+      controllerMeshes = Array(2);
+      for (let i = 0; i < controllerMeshes.length; i++) {
+        const controllerMesh = _makeControllerMesh();
+
+        scene.add(controllerMesh);
+        controllerMeshes[i] = controllerMesh;
+      }
+
+      const testMesh = new THREE.Mesh(
+        new THREE.BoxBufferGeometry(1, 1, 1),
+        new THREE.MeshPhongMaterial({
+          color: 0xFFFF00,
+        })
+      );
+      testMesh.position.z = -3;
+      testMesh.frustumCulled = false;
+      scene.add(testMesh);
 
       const _makeRayMesh = () => {
         const rayGeometry = new THREE.CylinderBufferGeometry(0.005, 0.005, 1, 3, 1)
@@ -143,11 +158,15 @@
         const material = terrainMaterial;
 
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.meshId = meshId;
+        mesh.matrixAutoUpdate = false;
         mesh.frustumCulled = false;
+        mesh.meshId = meshId;
         return mesh;
       };
-      const _loadTerrainMesh = (terrainMesh, {positionBuffer, positionArray, positionCount, normalBuffer, normalArray, normalCount, indexBuffer, indexArray, count}) => {
+      const _loadTerrainMesh = (terrainMesh, {transformMatrix, positionBuffer, positionCount, normalBuffer, normalCount, indexBuffer, count}) => {
+        terrainMesh.matrix.fromArray(transformMatrix);
+        terrainMesh.matrixWorldNeedsUpdate = true;
+
         const {geometry} = terrainMesh;
         const attributes = renderer.getAttributes();
 
@@ -196,17 +215,61 @@
         }
       };
 
-      if (window.browser && window.browser.magicleap) {
-        mesher = window.browser.magicleap.RequestMeshing();
-        mesher.onmesh = _onMesh;
-      }
-
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
       });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
+
+      if (window.browser && window.browser.magicleap) {
+        mesher = window.browser.magicleap.RequestMeshing();
+        mesher.onmesh = _onMesh;
+      } else {
+        const gl = renderer.getContext();
+
+        const transformMatrix = localMatrix
+          .fromArray(window.document.xrOffset.matrix)
+          .getInverse(localMatrix)
+          .toArray(localFloat32Array);
+
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const positions = Float32Array.from([0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5]);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+        const positionCount = positions.length;
+
+        const normalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+        const normals = Float32Array.from([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1]);
+        gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+        const normalCount = normals.length;
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        const indices = Uint16Array.from([0, 2, 1, 2, 3, 1, 4, 6, 5, 6, 7, 5, 8, 10, 9, 10, 11, 9, 12, 14, 13, 14, 15, 13, 16, 18, 17, 18, 19, 17, 20, 22, 21, 22, 23, 21]);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+        const count = indices.length;
+
+        renderer.state.reset();
+
+        const updates = [
+          {
+            id: 0,
+            type: 'update',
+            transformMatrix,
+            positionBuffer,
+            positionCount,
+            normalBuffer,
+            normalCount,
+            indexBuffer,
+            count,
+          },
+        ];
+        setInterval(() => {
+          _onMesh(updates);
+        }, 100);
+      }
 
       (() => {
         intersectScene = new THREE.Scene();
@@ -243,12 +306,14 @@
             .applyMatrix(new THREE.Matrix4().makeTranslation(0, 0.2/2, 0)),
           new THREE.MeshBasicMaterial({
             // color: 0x0000FF,
-            map: renderTarget,
+            map: renderTarget.texture,
           })
         );
         // planeMesh.position.z = -1;
         // planeMesh.updateMatrixWorld();
-        // planeMesh.matrixAutoUpdate = false;
+        planeMesh.matrixAutoUpdate = false;
+        // planeMesh.updateMatrixWorld();
+        planeMesh.matrixWorldNeedsUpdate = true;
         planeMesh.frustumCulled = false;
         scene.add(planeMesh);
 
@@ -275,29 +340,40 @@
     let mode3d = false;
     function animate(time, frame) {
       if (renderer.vr.enabled) {
-        const inputSources = display.session.getInputSources();
+        for (let i = 0; i < controllerMeshes.length; i++) {
+          controllerMeshes[i].visible = false;
+        }
 
+        const inputSources = display.session.getInputSources();
         for (let i = 0; i < inputSources.length; i++) {
           const inputSource = inputSources[i];
           const pose = frame.getInputPose(inputSource);
 
-          /* const rayMesh = rayMeshes[i];
-          rayMesh.matrix.fromArray(pose.pointerMatrix);
-          rayMesh.matrix.decompose(localVector, localQuaternion, localVector2);
-          rayMesh.updateMatrixWorld(true); */
+          const controllerIndex = _getControllerIndex(inputSource);
+          const controllerMesh = controllerMeshes[controllerIndex];
+          controllerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
+          // controllerMesh.updateMatrixWorld();
+          controllerMesh.matrixWorldNeedsUpdate = true;
+          // controllerMesh.matrixWorld.multiplyMatrices(controllerMesh.parent.matrixWorld, controllerMesh.matrix);
+          // controllerMesh.matrixWorld.fromArray(pose.targetRay.transformMatrix);
+          // controllerMesh.matrix.decompose(controllerMesh.position, controllerMesh.quaternion, controllerMesh.scale);
+          // controllerMesh.updateMatrixWorld(true);
+          controllerMesh.visible = true;
+
+          // console.log('controller position', controllerMesh.position.toArray().join(','));
 
           if (i === 0) { // left
-            intersectCamera.matrix.fromArray(pose.pointerMatrix);
+            intersectCamera.matrix.fromArray(pose.targetRay.transformMatrix);
             intersectCamera.matrix.decompose(intersectCamera.position, intersectCamera.quaternion, intersectCamera.scale);
             // console.log('position', intersectCamera.position.toArray().join(','));
             intersectCamera.updateMatrixWorld(true);
 
             if (planeMesh.visible) {
-              planeMesh.matrix.fromArray(pose.pointerMatrix);
+              planeMesh.matrix.fromArray(pose.targetRay.transformMatrix);
               planeMesh.matrix.decompose(planeMesh.position, planeMesh.quaternion, planeMesh.scale);
               planeMesh.updateMatrixWorld(true);
             } else {
-              containerMesh.matrix.fromArray(pose.pointerMatrix);
+              containerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
               containerMesh.matrix.decompose(containerMesh.position, containerMesh.quaternion, containerMesh.scale);
               containerMesh.position.y += 0.1;
               localEuler.setFromQuaternion(containerMesh.quaternion, 'YXZ');
@@ -306,7 +382,7 @@
               containerMesh.quaternion.setFromEuler(localEuler);
               containerMesh.scale.set(0.05, 0.05, 0.05);
               containerMesh.matrix.compose(containerMesh.position, containerMesh.quaternion, containerMesh.scale);
-              containerMesh.updateMatrixWorld(true);
+              // containerMesh.updateMatrixWorld(true);
             }
           }
         }
@@ -365,46 +441,40 @@
     init();
 
     (async () => {
-      console.log('request device');
-      display = await navigator.xr.requestDevice();
-      console.log('request session');
-      const session = await display.requestSession({
-        exclusive: true,
-      });
-      display.session = session;
-
-      /* session.onselect = e => {
-        const controllerIndex = e.inputSource.handedness === 'left' ? 0 : 1;
-        const rayMesh = rayMeshes[controllerIndex];
-        rayMesh.matrixWorld.decompose(rayMesh.position, rayMesh.quaternion, rayMesh.scale);
-
-        const objectMesh = _makeControllerMesh(
-          rayMesh.position.x, rayMesh.position.y, rayMesh.position.z,
-          rayMesh.quaternion.x, rayMesh.quaternion.y, rayMesh.quaternion.z, rayMesh.quaternion.w,
-        );
-        scene.add(objectMesh);
-      }; */
-
-      // console.log('request first frame');
-      session.requestAnimationFrame((timestamp, frame) => {
-        renderer.vr.setSession(session, {
-          frameOfReferenceType: 'stage',
+      if (navigator.xr) {
+        console.log('request device');
+        display = await navigator.xr.requestDevice();
+        console.log('request session');
+        const session = await display.requestSession({
+          exclusive: true,
         });
+        display.session = session;
 
-        const viewport = session.baseLayer.getViewport(frame.views[0]);
-        const width = viewport.width;
-        const height = viewport.height;
+        // console.log('request first frame');
+        session.requestAnimationFrame((timestamp, frame) => {
+          renderer.vr.setSession(session, {
+            frameOfReferenceType: 'stage',
+          });
 
-        renderer.setSize(width * 2, height);
+          const viewport = session.baseLayer.getViewport(frame.views[0]);
+          const width = viewport.width;
+          const height = viewport.height;
 
-        renderer.setAnimationLoop(null);
+          renderer.setSize(width * 2, height);
 
-        renderer.vr.enabled = true;
-        renderer.vr.setDevice(display);
+          renderer.setAnimationLoop(null);
+
+          renderer.vr.enabled = true;
+          renderer.vr.setDevice(display);
+          renderer.vr.setAnimationLoop(animate);
+
+          console.log('running!');
+        });
+      } else {
         renderer.vr.setAnimationLoop(animate);
 
         console.log('running!');
-      });
+      }
     })();
   </script>
   </body>

@@ -3,7 +3,7 @@
 using namespace v8;
 using namespace node;
 
-Handle<Object> ImageData::Initialize(Isolate *isolate) {
+Local<Object> ImageData::Initialize(Isolate *isolate) {
   Nan::EscapableHandleScope scope;
 
   // constructor
@@ -14,7 +14,7 @@ Handle<Object> ImageData::Initialize(Isolate *isolate) {
   // prototype
   Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
 
-  return scope.Escape(ctor->GetFunction());
+  return scope.Escape(Nan::GetFunction(ctor).ToLocalChecked());
 }
 
 unsigned int ImageData::GetWidth() {
@@ -45,8 +45,8 @@ NAN_METHOD(ImageData::New) {
   ImageData *imageData;
   if (info[0]->IsArrayBufferView() && info[1]->IsNumber() && info[2]->IsNumber()) {
     Local<ArrayBufferView> array = Local<ArrayBufferView>::Cast(info[0]);
-    unsigned int width = info[1]->Uint32Value();
-    unsigned int height = info[2]->Uint32Value();
+    unsigned int width = TO_UINT32(info[1]);
+    unsigned int height = TO_UINT32(info[2]);
 
     if (array->ByteLength() >= (width * height * 4)) {
       Local<ArrayBuffer> arrayBuffer = array->Buffer();
@@ -56,8 +56,8 @@ NAN_METHOD(ImageData::New) {
       return Nan::ThrowError("ImageData: Invalid array length");
     }
   } else if (info[0]->IsNumber() && info[1]->IsNumber()) {
-    unsigned int width = info[0]->Uint32Value();
-    unsigned int height = info[1]->Uint32Value();
+    unsigned int width = TO_UINT32(info[0]);
+    unsigned int height = TO_UINT32(info[1]);
     imageData = new ImageData(width, height);
   } else {
     return Nan::ThrowError("ImageData: Invalid arguments");
@@ -112,14 +112,12 @@ NAN_GETTER(ImageData::DataGetter) {
 ImageData::ImageData(unsigned int width, unsigned int height) {
   SkImageInfo info = SkImageInfo::Make(width, height, SkColorType::kRGBA_8888_SkColorType, SkAlphaType::kPremul_SkAlphaType);
   unsigned char *address = (unsigned char *)malloc(width * height * 4);
-  SkPixmap pixmap(info, address, width * 4);
-  bitmap.installPixels(pixmap);
+  bitmap.installPixels(info, address, width * 4);
 }
 ImageData::ImageData(const char *data, unsigned int width, unsigned int height) {
   SkImageInfo info = SkImageInfo::Make(width, height, SkColorType::kBGRA_8888_SkColorType, SkAlphaType::kPremul_SkAlphaType);
   unsigned char *address = (unsigned char *)malloc(width * height * 4);
   memcpy(address, data, width * height * 4);
-  SkPixmap pixmap(info, address, width * 4);
-  bitmap.installPixels(pixmap);
+  bitmap.installPixels(info, address, width * 4);
 }
 ImageData::~ImageData () {}

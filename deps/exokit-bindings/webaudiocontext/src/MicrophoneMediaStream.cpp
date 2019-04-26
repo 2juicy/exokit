@@ -6,7 +6,7 @@ MicrophoneMediaStream::MicrophoneMediaStream() : tracks(Nan::New<Array>(0)) {}
 
 MicrophoneMediaStream::~MicrophoneMediaStream() {}
 
-Handle<Object> MicrophoneMediaStream::Initialize(Isolate *isolate, Local<Value> mediaStreamTrackCons) {
+Local<Object> MicrophoneMediaStream::Initialize(Isolate *isolate, Local<Value> mediaStreamTrackCons) {
   Nan::EscapableHandleScope scope;
 
   // constructor
@@ -16,11 +16,11 @@ Handle<Object> MicrophoneMediaStream::Initialize(Isolate *isolate, Local<Value> 
 
   // prototype
   Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
-  AudioNode::InitializePrototype(proto);
-  AudioSourceNode::InitializePrototype(proto);
+  // AudioNode::InitializePrototype(proto);
+  // AudioSourceNode::InitializePrototype(proto);
   MicrophoneMediaStream::InitializePrototype(proto);
 
-  Local<Function> ctorFn = ctor->GetFunction();
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
   ctorFn->Set(JS_STR("MediaStreamTrack"), mediaStreamTrackCons);
 
   return scope.Escape(ctorFn);
@@ -37,7 +37,7 @@ NAN_METHOD(MicrophoneMediaStream::New) {
   Local<Object> microphoneMediaStreamObj = info.This();
   microphoneMediaStream->Wrap(microphoneMediaStreamObj);
 
-  Local<Function> mediaStreamTrackConstructor = Local<Function>::Cast(microphoneMediaStreamObj->Get(JS_STR("constructor"))->ToObject()->Get(JS_STR("MediaStreamTrack")));
+  Local<Function> mediaStreamTrackConstructor = Local<Function>::Cast(JS_OBJ(microphoneMediaStreamObj->Get(JS_STR("constructor")))->Get(JS_STR("MediaStreamTrack")));
   Local<Value> argv[] = {
     microphoneMediaStreamObj,
   };
@@ -45,10 +45,10 @@ NAN_METHOD(MicrophoneMediaStream::New) {
   Local<Array> localTracks = Nan::New(microphoneMediaStream->tracks);
   localTracks->Set(0, mediaStreamTrackObj);
 
-  {
+  /* {
     lab::ContextRenderLock r(getDefaultAudioContext(), "MicrophoneMediaStream::New");
     microphoneMediaStream->audioNode = lab::MakeHardwareSourceNode(r);
-  }
+  } */
 
   info.GetReturnValue().Set(microphoneMediaStreamObj);
 }
