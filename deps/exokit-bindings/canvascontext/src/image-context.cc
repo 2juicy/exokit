@@ -13,7 +13,7 @@ Local<Object> Image::Initialize(Isolate *isolate) {
   // prototype
   Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
 
-  Nan::SetMethod(proto, "load", LoadMethod);
+  Nan::SetMethod(proto, "load", Load);
 
   return scope.Escape(Nan::GetFunction(ctor).ToLocalChecked());
 }
@@ -46,16 +46,13 @@ unsigned int Image::GetNumChannels() {
   }
 } */
 
-std::map<uv_async_t *, Image *> handleToImageMap;
 void Image::RunInMainThread(uv_async_t *handle) {
   Nan::HandleScope scope;
 
-  auto iter = handleToImageMap.find(handle);
-  Image *image = (*iter).second;
-  handleToImageMap.erase(iter);
+  Image *image = (Image *)handle->data;
 
   Local<Object> asyncObject = Nan::New<Object>();
-  AsyncResource asyncResource(Isolate::GetCurrent(), asyncObject, "imageLoad");
+  AsyncResource asyncResource(Isolate::GetCurrent(), asyncObject, "Image::RunInMainThread");
 
   Local<Function> cbFn = Nan::New(image->cbFn);
   Local<String> arg0 = Nan::New<String>(image->error).ToLocalChecked();
@@ -68,23 +65,25 @@ void Image::RunInMainThread(uv_async_t *handle) {
   image->arrayBuffer.Reset();
   image->error = "";
 
-  uv_close((uv_handle_t *)handle, [](uv_handle_t *handle) {
-    free(handle);
-  });
+  uv_close((uv_handle_t *)handle, nullptr);
 }
 
 void Image::Load(Local<ArrayBuffer> arrayBuffer, size_t byteOffset, size_t byteLength, Local<Function> cbFn) {
-  if (this->cbFn.IsEmpty()) {
+  if (!this->loading) {
     unsigned char *buffer = (unsigned char *)arrayBuffer->GetContents().Data() + byteOffset;
 
     this->arrayBuffer.Reset(arrayBuffer);
     this->cbFn.Reset(cbFn);
-    this->error = "";
+    this->loading = true;
+    this->hasCbFn = !cbFn.IsEmpty();
 
-    threadAsyncHandle = (uv_async_t *)malloc(sizeof(uv_async_t));
-    uv_async_init(uv_default_loop(), threadAsyncHandle, RunInMainThread);
-
-    handleToImageMap[threadAsyncHandle] = this;
+    if (this->hasCbFn) {
+      uv_loop_t *loop = windowsystembase::GetEventLoop();
+      uv_async_init(loop, &this->threadAsyncHandle, RunInMainThread);
+      this->threadAsyncHandle.data = this;
+    } else {
+      uv_sem_init(&this->sem, 0);
+    }
 
     std::thread([this, buffer, byteLength]() -> void {
       sk_sp<SkData> data = SkData::MakeWithoutCopy(buffer, byteLength);
@@ -135,14 +134,23 @@ void Image::Load(Local<ArrayBuffer> arrayBuffer, size_t byteOffset, size_t byteL
         }
       }
 
-      uv_async_send(this->threadAsyncHandle);
+      if (this->hasCbFn) {
+        uv_async_send(&this->threadAsyncHandle);
+      } else {
+        uv_sem_post(&this->sem);
+      }
     }).detach();
+
+    if (!this->hasCbFn) {
+      uv_sem_wait(&this->sem);
+      uv_sem_destroy(&this->sem);
+
+      if (this->error.length() > 0) {
+        Nan::ThrowError(this->error.c_str());
+      }
+    }
   } else {
-    Local<String> arg0 = Nan::New<String>("already loading").ToLocalChecked();
-    Local<Value> argv[] = {
-      arg0,
-    };
-    cbFn->Call(Isolate::GetCurrent()->GetCurrentContext(), Nan::Null(), sizeof(argv)/sizeof(argv[0]), argv);
+    Nan::ThrowError("already loading");
   }
 }
 
@@ -206,32 +214,34 @@ NAN_GETTER(Image::DataGetter) {
   info.GetReturnValue().Set(Nan::New(image->dataArray));
 }
 
-NAN_METHOD(Image::LoadMethod) {
-  Nan::HandleScope scope;
+NAN_METHOD(Image::Load) {
+  // Nan::HandleScope scope;
 
-  if (info[1]->IsFunction()) {
-    if (info[0]->IsArrayBuffer()) {
-      Image *image = ObjectWrap::Unwrap<Image>(info.This());
+  if (info[0]->IsArrayBuffer()) {
+    Image *image = ObjectWrap::Unwrap<Image>(info.This());
 
-      Local<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::Cast(info[0]);
-      Local<Function> cbFn = Local<Function>::Cast(info[1]);
-
-      image->Load(arrayBuffer, 0, arrayBuffer->ByteLength(), cbFn);
-    } else if (info[0]->IsTypedArray()) {
-      Image *image = ObjectWrap::Unwrap<Image>(info.This());
-
-      Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(info[0]);
-      Local<ArrayBuffer> arrayBuffer = arrayBufferView->Buffer();
-      Local<Function> cbFn = Local<Function>::Cast(info[1]);
-
-      image->Load(arrayBuffer, arrayBufferView->ByteOffset(), arrayBufferView->ByteLength(), cbFn);
-    } else {
-      Nan::ThrowError("invalid arguments");
+    Local<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::Cast(info[0]);
+    Local<Function> cbFn;
+    if (info[1]->IsFunction()) {
+      cbFn = Local<Function>::Cast(info[1]);
     }
+
+    image->Load(arrayBuffer, 0, arrayBuffer->ByteLength(), cbFn);
+  } else if (info[0]->IsTypedArray()) {
+    Image *image = ObjectWrap::Unwrap<Image>(info.This());
+
+    Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(info[0]);
+    Local<ArrayBuffer> arrayBuffer = arrayBufferView->Buffer();
+    Local<Function> cbFn;
+    if (info[1]->IsFunction()) {
+      cbFn = Local<Function>::Cast(info[1]);
+    }
+
+    image->Load(arrayBuffer, arrayBufferView->ByteOffset(), arrayBufferView->ByteLength(), cbFn);
   } else {
     Nan::ThrowError("invalid arguments");
   }
 }
 
-Image::Image () {}
+Image::Image () : loading(false), hasCbFn(false) {}
 Image::~Image () {}

@@ -1,40 +1,36 @@
 const path = require('path');
-const {isMainThread} = require('worker_threads');
+const {URL} = require('url');
+const {isMainThread, parentPort} = require('worker_threads');
+const {process} = global;
 
-/* const exokitNode = (() => {
-  const oldCwd = process.cwd();
-  const nodeModulesDir = path.resolve(path.dirname(require.resolve('native-graphics-deps')), '..');
-  process.chdir(nodeModulesDir);
-  const exokitNode = require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node'));
-  process.chdir(oldCwd);
-  return exokitNode;
-})(); */
-const {
-  exokitNode,
-  WindowWorker,
-  vmOne,
-} = (() => {
-  if (isMainThread) {
-    return {
-     exokitNode: require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node')),
-     WindowWorker: require('window-worker'),
-     vmOne: require('vm-one'),
-    };
-  } else {
-    return {};
-  }
-})();
+const exokitNode = require(path.join(__dirname, '..', 'build', 'Release', 'exokit.node'));
+const {nativeWindow} = exokitNode;
+
 const webGlToOpenGl = require('webgl-to-opengl');
+const symbols = require('./symbols');
 const GlobalContext = require('./GlobalContext');
 
 const bindings = {};
 for (const k in exokitNode) {
   bindings[k] = exokitNode[k];
 }
-bindings.nativeWorker = WindowWorker;
-bindings.nativeVm = vmOne;
-const isAndroid = bindings.nativePlatform === 'android';
-const glslVersion = isAndroid ? '300 es' : '330';
+
+URL.createObjectURL = blob => {
+  const url = 'blob:' + GlobalContext.xrState.blobId[0]++;
+  bindings.nativeCache.set(url, blob.buffer);
+  return url;
+};
+URL.revokeObjectURL = url => {
+  bindings.nativeCache.delete(url);
+};
+URL.lookupObjectURL = url => {
+  const uint8Array = bindings.nativeCache.get(url);
+  return uint8Array && new Blob([uint8Array], {
+    type: 'application/octet-stream', // TODO: make this the correct type
+  });
+}
+
+const glslVersion = bindings.nativePlatform === 'android' ? '300 es' : '330';
 const _decorateGlIntercepts = gl => {
   gl.createShader = (createShader => function(type) {
     const result = createShader.call(this, type);
@@ -73,25 +69,337 @@ const _decorateGlIntercepts = gl => {
   })(gl.getUniformLocation);
   gl.setCompatibleXRDevice = () => Promise.resolve();
 };
+const _onGl3DConstruct = (gl, canvas, attrs) => {
+  const canvasWidth = canvas.width || innerWidth;
+  const canvasHeight = canvas.height || innerHeight;
+  attrs = attrs || {};
+  attrs = {
+    alpha: !!attrs.alpha,
+    antialias: !!attrs.antialias,
+    depth: !!attrs.depth,
+    desynchronized: !!attrs.desynchronized,
+    failIfMajorPerformanceCaveat: !!attrs.failIfMajorPerformanceCaveat,
+    powerPreference: attrs.powerPreference || 'default',
+    premultipliedAlpha: !!attrs.premultipliedAlpha,
+    preserveDrawingBuffer: !!attrs.preserveDrawingBuffer,
+    stencil: !!attrs.stencil,
+  };
+
+  gl.d = 3;
+  gl.canvas = canvas;
+  gl.getContextAttributes = () => attrs;
+
+  const document = canvas.ownerDocument;
+  const window = document.defaultView;
+
+  const windowSpec = (() => {
+    if (!window[symbols.optionsSymbol].args.nogl) {
+      try {
+        const contained = document.documentElement.contains(canvas);
+        const {hidden} = document;
+        const {headless} = window[symbols.optionsSymbol].args;
+        // XXX also set title
+        // const title = `Exokit ${GlobalContext.version}`;
+
+        const windowHandle = nativeWindow.createWindowHandle(canvasWidth, canvasHeight, contained && !hidden && !headless);
+        return nativeWindow.initWindow3D(windowHandle, gl);
+      } catch (err) {
+        console.warn(err.stack);
+        return null;
+      }
+    } else {
+      return null;
+    }
+  })();
+
+  if (windowSpec) {
+    const [windowHandle, vao] = windowSpec;
+
+    gl.setWindowHandle(windowHandle);
+    gl.setDefaultVao(vao);
+    nativeWindow.setEventHandler(windowHandle, (type, data) => {
+      switch (type) {
+        case 'move': {
+          const {x, y} = data;
+
+          window.dispatchEvent(new window.CustomEvent('move', {
+            detail: {
+              x,
+              y,
+            },
+          }));
+          break;
+        }
+        case 'windowResize': {
+          const {width, height} = data;
+          window.innerWidth = width;
+          window.innerHeight = height;
+
+          window.dispatchEvent(new window.Event('resize'));
+          break;
+        }
+        /* case 'framebufferResize': {
+          const {width, height} = data;
+          // innerWidth = width;
+          // innerHeight = height;
+
+          window.innerWidth = width / window.devicePixelRatio;
+          window.innerHeight = height / window.devicePixelRatio;
+          window.dispatchEvent(new window.Event('resize'));
+          break;
+        } */
+        case 'focus': {
+          const {focused} = data;
+          if (focused) {
+            window.dispatchEvent(new window.Event('focus'));
+          } else {
+            window.dispatchEvent(new window.Event('blur'));
+            if (window.document.pointerLockElement) {
+              window.document.exitPointerLock();
+            }
+          }
+          break;
+        }
+        case 'maximize': {
+          window.dispatchEvent(new window.Event(data.maximized ? 'maximize' : 'restore'));
+          break;
+        }
+        case 'minimize': {
+          window.dispatchEvent(new window.Event(data.minimized ? 'minimize' : 'restore'));
+          break;
+        }
+        case 'mouseenter': {
+          window.dispatchEvent(new window.Event(data.entered ? 'mouseenter' : 'mouseleave'));
+          break;
+        }
+        case 'keydown': {
+          let handled = false;
+          if (data.keyCode === 27) { // ESC
+            if (window.document.pointerLockElement) {
+              window.document.exitPointerLock();
+              handled = true;
+            }
+            if (window.document.fullscreenElement) {
+              window.document.exitFullscreen();
+              handled = true;
+            }
+          }
+          if (data.keyCode === 122) { // F11
+            if (window.document.fullscreenElement) {
+              window.document.exitFullscreen();
+              handled = true;
+            } else {
+              window.document.requestFullscreen();
+              handled = true;
+            }
+          }
+
+          if (!handled) {
+            canvas.dispatchEvent(new window.KeyboardEvent(type, data));
+          }
+          break;
+        }
+        case 'keyup':
+        case 'keypress': {
+          canvas.dispatchEvent(new window.KeyboardEvent(type, data));
+          break;
+        }
+        case 'mousedown':
+        case 'mouseup':
+        case 'click':
+        case 'dblclick': {
+          canvas.dispatchEvent(new window.MouseEvent(type, data));
+          break;
+        }
+        case 'wheel': {
+          canvas.dispatchEvent(new window.WheelEvent(type, data));
+          break;
+        }
+        case 'mousemove': {
+          canvas.dispatchEvent(new window.MouseEvent(type, data));
+          break;
+        }
+        case 'drop': {
+          const _readFiles = paths => {
+            const result = [];
+
+            return Promise.all(paths.map(p =>
+              new Promise((accept, reject) => {
+                fs.lstat(p, (err, stats) => {
+                  if (!err) {
+                    if (stats.isFile()) {
+                      fs.readFile(p, (err, data) => {
+                        if (!err) {
+                          const file = new window.Blob([data]);
+                          file.name = path.basename(p);
+                          file.path = p;
+                          result.push(file);
+
+                          accept();
+                        } else {
+                          reject(err);
+                        }
+                      });
+                    } else if (stats.isDirectory()) {
+                      fs.readdir(p, (err, fileNames) => {
+                        if (!err) {
+                          _readFiles(fileNames.map(fileName => path.join(p, fileName)))
+                            .then(files => {
+                              result.push.apply(result, files);
+
+                              accept();
+                            })
+                            .catch(err => {
+                              reject(err);
+                            });
+                        } else {
+                          reject(err);
+                        }
+                      });
+                    } else {
+                      accept();
+                    }
+                  } else {
+                    reject(err);
+                  }
+                });
+              })
+            ))
+              .then(() => result);
+          };
+
+          _readFiles(data.paths)
+            .then(files => {
+              const dataTransfer = new window.DataTransfer({
+                files,
+              });
+              const e = new window.DragEvent('drop');
+              e.dataTransfer = dataTransfer;
+              canvas.dispatchEvent(e);
+            })
+            .catch(err => {
+              console.warn(err.stack);
+            });
+          break;
+        }
+        case 'quit': {
+          gl.destroy();
+          break;
+        }
+      }
+    });
+    
+    const [fbo, tex, depthTex, msFbo, msTex, msDepthTex] = attrs.desynchronized ? [
+      0, 0, 0, 0, 0, 0,
+    ] : nativeWindow.createRenderTarget(gl, canvasWidth, canvasHeight);
+    if (msFbo) {
+      gl.setDefaultFramebuffer(msFbo);
+    }
+    gl.framebuffer = {
+      type: 'canvas',
+      msFbo,
+      msTex,
+      msDepthTex,
+      fbo,
+      tex,
+      depthTex,
+    };
+    parentPort.postMessage({
+      method: 'emit',
+      type: 'framebuffer',
+      event: gl.framebuffer,
+    });
+    gl.resize = (width, height) => {
+      if (!attrs.desynchronized && gl.framebuffer.type === 'canvas') {
+        nativeWindow.setCurrentWindowContext(windowHandle);
+        const [newFbo, newTex, newDepthTex, newMsFbo, newMsTex, newMsDepthTex] = nativeWindow.resizeRenderTarget(gl, width, height, fbo, tex, depthTex, msFbo, msTex, msDepthTex);
+
+        gl.framebuffer = {
+          type: 'canvas',
+          msFbo: newMsFbo,
+          msTex: newMsTex,
+          msDepthTex: newMsDepthTex,
+          fbo: newFbo,
+          tex: newTex,
+          depthTex: newDepthTex,
+        };
+        parentPort.postMessage({
+          method: 'emit',
+          type: 'framebuffer',
+          event: gl.framebuffer,
+        });
+      }
+    };
+
+    const ondomchange = () => {
+      process.nextTick(() => { // show/hide synchronously emits events
+        if (!document.hidden && !window[symbols.optionsSymbol].args.headless) {
+          const domVisible = canvas.ownerDocument.documentElement.contains(canvas);
+          const windowVisible = nativeWindow.isVisible(windowHandle);
+          if (domVisible && !windowVisible) {
+            nativeWindow.setVisibility(windowHandle, true);
+          } else if (!domVisible && windowVisible) {
+            nativeWindow.setVisibility(windowHandle, false);
+          }
+        }
+      });
+    };
+    canvas.ownerDocument.on('domchange', ondomchange);
+
+    gl.destroy = (destroy => function() {
+      destroy.call(this);
+
+      if (gl === GlobalContext.vrPresentState.glContext) {
+        throw new Error('destroyed vr presenting context');
+        /* bindings.nativeOpenVR.VR_Shutdown();
+
+        GlobalContext.vrPresentState.glContextId = 0;
+        GlobalContext.vrPresentState.system = null;
+        GlobalContext.vrPresentState.compositor = null; */
+      }
+
+      nativeWindow.destroyWindowHandle(windowHandle);
+      canvas._context = null;
+
+      canvas.ownerDocument.removeListener('domchange', ondomchange);
+
+      GlobalContext.contexts.splice(GlobalContext.contexts.indexOf(gl), 1);
+
+      if (gl.id === 1) {
+        process.kill(process.pid); // XXX make this a softer process.exit()
+      }
+    })(gl.destroy);
+    
+    gl.id = Atomics.add(GlobalContext.xrState.id, 0) + 1;
+    GlobalContext.contexts.push(gl);
+
+    if (attrs.antialias) {
+      GlobalContext.xrState.aaEnabled[0] = 1;
+    }
+  } else {
+    gl.destroy();
+  }
+};
 bindings.nativeGl = (nativeGl => {
-  function WebGLRenderingContext(canvas) {
-    const gl = new nativeGl();
-    _decorateGlIntercepts(gl);
-    WebGLRenderingContext.onconstruct(gl, canvas);
-    return gl;
+  class WebGLRenderingContext extends nativeGl {
+    constructor(canvas, attrs) {
+      super();
+      _decorateGlIntercepts(this);
+      _onGl3DConstruct(this, canvas, attrs);
+    }
   }
   for (const k in nativeGl) {
     WebGLRenderingContext[k] = nativeGl[k];
   }
-  WebGLRenderingContext.onconstruct = null;
   return WebGLRenderingContext;
 })(bindings.nativeGl);
 bindings.nativeGl2 = (nativeGl2 => {
-  function WebGL2RenderingContext(canvas) {
-    const gl = new nativeGl2();
-    _decorateGlIntercepts(gl);
-    bindings.nativeGl.onconstruct(gl, canvas);
-    return gl;
+  class WebGL2RenderingContext extends nativeGl2 {
+    constructor(canvas, attrs) {
+      super();
+      _decorateGlIntercepts(this);
+      _onGl3DConstruct(this, canvas, attrs);
+    }
   }
   for (const k in nativeGl2) {
     WebGL2RenderingContext[k] = nativeGl2[k];
@@ -99,16 +407,64 @@ bindings.nativeGl2 = (nativeGl2 => {
   return WebGL2RenderingContext;
 })(bindings.nativeGl2);
 
+const _onGl2DConstruct = (ctx, canvas, attrs) => {
+  const canvasWidth = canvas.width || innerWidth;
+  const canvasHeight = canvas.height || innerHeight;
+
+  ctx.d = 2;
+  ctx.canvas = canvas;
+
+  const window = canvas.ownerDocument.defaultView;
+
+  const windowSpec = (() => {
+    if (!window[symbols.optionsSymbol].args.nogl) {
+      let windowHandle = window[symbols.canvas2dWindowHandle];
+      let grContext = window[symbols.canvas2dGrContext];
+      if (!windowHandle) {
+        windowHandle = nativeWindow.createWindowHandle(16, 16, false);
+        window[symbols.canvas2dWindowHandle] = windowHandle;
+
+        nativeWindow.setCurrentWindowContext(windowHandle);
+        grContext = ctx.makeGrContext();
+        window[symbols.canvas2dGrContext] = grContext;
+      }
+      return [windowHandle, grContext];
+    } else {
+      return null;
+    }
+  })();
+
+  if (windowSpec) {
+    const [windowHandle, grContext] = windowSpec;
+    ctx.setWindowHandle(windowHandle);
+    nativeWindow.setCurrentWindowContext(windowHandle);
+    ctx.setGrContext(grContext);
+    ctx.setTexture(canvasWidth, canvasHeight);
+
+    ctx.destroy = (destroy => function() {
+      destroy.call(this);
+      
+      nativeWindow.destroyWindowHandle(windowHandle);
+      canvas._context = null;
+
+      GlobalContext.contexts.splice(GlobalContext.contexts.indexOf(ctx), 1);
+    })(ctx.destroy);
+    
+    ctx.id = Atomics.add(GlobalContext.xrState.id, 0) + 1;
+    GlobalContext.contexts.push(ctx);
+  } else {
+    ctx.destroy();
+  }
+};
 bindings.nativeCanvasRenderingContext2D = (nativeCanvasRenderingContext2D => {
-  function CanvasRenderingContext2D(canvas) {
+  function CanvasRenderingContext2D(canvas, attrs) {
     const ctx = new nativeCanvasRenderingContext2D();
-    CanvasRenderingContext2D.onconstruct(ctx, canvas);
+    _onGl2DConstruct(ctx, canvas, attrs);
     return ctx;
   }
   for (const k in nativeCanvasRenderingContext2D) {
     CanvasRenderingContext2D[k] = nativeCanvasRenderingContext2D[k];
   }
-  CanvasRenderingContext2D.onconstruct = null;
   return CanvasRenderingContext2D;
 })(bindings.nativeCanvasRenderingContext2D);
 GlobalContext.CanvasRenderingContext2D = bindings.nativeCanvasRenderingContext2D;
@@ -118,33 +474,24 @@ GlobalContext.WebGL2RenderingContext = bindings.nativeGl2;
 if (bindings.nativeAudio) {
   bindings.nativeAudio.AudioContext = (OldAudioContext => class AudioContext extends OldAudioContext {
     decodeAudioData(arrayBuffer, successCallback, errorCallback) {
-      return new Promise((resolve, reject) => {
-        try {
-          let audioBuffer = this._decodeAudioDataSync(arrayBuffer);
-          if (successCallback) {
-            process.nextTick(() => {
-              try {
-                successCallback(audioBuffer);
-              } catch(err) {
-                console.warn(err);
-              }
-            });
+      const result = new Promise((accept, reject) => {
+        const audioBuffer = this.createEmptyBuffer();
+        audioBuffer.load(arrayBuffer, errorString => {
+          if (!errorString) {
+            if (successCallback) {
+              successCallback(audioBuffer);
+            }
+            accept(audioBuffer);
+          } else {
+            const err = new Error(errorString);
+            if (errorCallback) {
+              errorCallback(err);
+            }
+            reject(err);
           }
-          resolve(audioBuffer);
-        } catch(err) {
-          console.warn(err);
-          if (errorCallback) {
-            process.nextTick(() => {
-              try {
-                errorCallback(err);
-              } catch(err) {
-                console.warn(err);
-              }
-            });
-          }
-          reject(err);
-        }
+        });
       });
+      return result;
     }
   })(bindings.nativeAudio.AudioContext);
   bindings.nativeAudio.PannerNode.setPath(path.join(require.resolve('native-audio-deps').slice(0, -'index.js'.length), 'assets', 'hrtf'));
@@ -279,10 +626,27 @@ if (bindings.nativeOpenVR) {
 	};
 }
 
+GlobalContext.nativeOculusVR = bindings.nativeOculusVR;
 GlobalContext.nativeOpenVR = bindings.nativeOpenVR;
 GlobalContext.nativeOculusMobileVr = bindings.nativeOculusMobileVr;
 GlobalContext.nativeMl = bindings.nativeMl;
 GlobalContext.nativeBrowser = bindings.nativeBrowser;
-GlobalContext.nativeOculusVR = bindings.nativeOculusVR;
+
+if (bindings.nativeMl) {
+  if (isMainThread) {
+    if (!bindings.nativeMl.IsSimulated()) {
+      bindings.nativeMl.InitLifecycle();
+    } else {
+      // try to connect to MLSDK
+      const MLSDK_PORT = 17955;
+      const s = net.connect(MLSDK_PORT, '127.0.0.1', () => {
+        s.destroy();
+
+        bindings.nativeMl.InitLifecycle();
+      });
+      s.on('error', () => {});
+    }
+  }
+}
 
 module.exports = bindings;

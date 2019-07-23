@@ -1,3 +1,5 @@
+#ifdef LUMIN
+
 #include <browser.h>
 
 #include <v8.h>
@@ -32,7 +34,7 @@ void QueueOnBrowserThread(std::function<void()> fn) {
   uv_sem_post(&browserThreadSem);
 } */
 
-void RunOnMainThread(std::function<void()> fn) {
+/* void RunOnMainThread(std::function<void()> fn) {
   {
     std::lock_guard<std::mutex> lock(mainThreadFnMutex);
     mainThreadFns.push_back(std::pair<std::function<void()>, bool>(fn, true));
@@ -40,7 +42,7 @@ void RunOnMainThread(std::function<void()> fn) {
 
   uv_async_send(&mainThreadAsync);
   uv_sem_wait(&mainThreadSem);
-}
+} */
 
 void QueueOnMainThread(std::function<void()> fn) {
   {
@@ -87,3 +89,5 @@ std::mutex mainThreadFnMutex;
 std::deque<std::pair<std::function<void()>, bool>> mainThreadFns;
 
 }
+
+#endif

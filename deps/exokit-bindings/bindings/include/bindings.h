@@ -3,6 +3,8 @@
 
 #include <v8.h>
 #include <node.h>
+#include <console.h>
+#include <cache.h>
 #include <image-context.h>
 #include <imageData-context.h>
 #include <imageBitmap-context.h>
@@ -14,17 +16,19 @@
 #include <AudioContext.h>
 #include <Video.h>
 #include <webrtc.h>
-// Stub out on Android for now until get libcef working on Android.
-#if !defined(ANDROID)
-  #include <browser.h>
-#endif
 #if _WIN32
 #include <leapmotion.h>
 #endif
+#if defined(ANDROID) && !defined(LUMIN)
+#include <browser-android.h>
+#endif
 #if defined(LUMIN)
 #include <magicleap.h>
+#include <browser.h>
 #endif
 
+Local<Object> makeConsole();
+Local<Object> makeCache();
 std::pair<Local<Object>, Local<FunctionTemplate>> makeGl();
 std::pair<Local<Object>, Local<FunctionTemplate>> makeGl2(Local<FunctionTemplate> baseCtor);
 Local<Object> makeImage();
@@ -36,7 +40,9 @@ Local<Object> makeCanvasGradient();
 Local<Object> makeCanvasPattern();
 Local<Object> makeAudio();
 Local<Object> makeVideo(Local<Value> imageDataCons);
+#if defined(ANDROID) || defined(LUMIN)
 Local<Object> makeBrowser();
+#endif
 Local<Object> makeRtc();
 
 #endif

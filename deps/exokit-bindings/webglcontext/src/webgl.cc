@@ -16,6 +16,13 @@
 using namespace v8;
 using namespace std;
 
+#if defined(ANDROID) || defined(LUMIN)
+PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVR glFramebufferTextureMultiviewOVRExt;
+PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR glFramebufferTextureMultisampleMultiviewOVRExt;
+
+bool extensionFunctionsInitialized = false;
+#endif
+
 // forward declarations
 /* enum GLObjectType {
   GLOBJECT_TYPE_BUFFER,
@@ -35,6 +42,8 @@ void unregisterGLObj(GLuint obj); */
 #define JS_GL_SET_CONSTANT(name, constant) proto->Set(JS_STR( name ), JS_INT(constant))
 
 #define JS_GL_CONSTANT(name) JS_GL_SET_CONSTANT(#name, GL_ ## name)
+
+GlShader::~GlShader() {}
 
 template<NAN_METHOD(F)>
 NAN_METHOD(glCallWrap) {
@@ -178,6 +187,7 @@ void setGlConstants(T &proto) {
 
   /* EnableCap */
   JS_GL_CONSTANT(TEXTURE_2D);
+  JS_GL_CONSTANT(TEXTURE_2D_MULTISAMPLE);
   JS_GL_CONSTANT(CULL_FACE);
   JS_GL_CONSTANT(BLEND);
   JS_GL_CONSTANT(DITHER);
@@ -901,6 +911,8 @@ void setGlConstants(T &proto) {
   //JS_GL_SET_CONSTANT("MAX_CLIENT_WAIT_TIMEOUT_WEBGL", MAX_CLIENT_WAIT_TIMEOUT_WEBGL);
 }
 
+// state tracking
+
 ViewportState::ViewportState(GLint x, GLint y, GLsizei w, GLsizei h, bool valid) : x(x), y(y), w(w), h(h), valid(valid) {}
 
 ViewportState &ViewportState::operator=(const ViewportState &viewportState) {
@@ -925,308 +937,174 @@ ColorMaskState &ColorMaskState::operator=(const ColorMaskState &colorMaskState) 
   return *this;
 }
 
-std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initialize(Isolate *isolate) {
-  // Nan::EscapableHandleScope scope;
+// utils
 
-  // constructor
-  Local<FunctionTemplate> ctor = Nan::New<FunctionTemplate>(WebGLRenderingContext::New);
+inline bool hasWidthHeight(Local<Value> &value) {
+  MaybeLocal<Object> valueObject(Nan::To<Object>(value));
+  if (!valueObject.IsEmpty()) {
+    Local<String> widthString = Nan::New<String>("width", sizeof("width") - 1).ToLocalChecked();
+    Local<String> heightString = Nan::New<String>("height", sizeof("height") - 1).ToLocalChecked();
 
-  ctor->InstanceTemplate()->SetInternalFieldCount(1);
-  ctor->SetClassName(JS_STR("WebGLRenderingContext"));
-
-  // prototype
-  Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
-
-  Nan::SetMethod(proto, "destroy", Destroy);
-  Nan::SetMethod(proto, "getWindowHandle", GetWindowHandle);
-  Nan::SetMethod(proto, "setWindowHandle", SetWindowHandle);
-  Nan::SetMethod(proto, "setDefaultVao", SetDefaultVao);
-  Nan::SetMethod(proto, "isDirty", IsDirty);
-  Nan::SetMethod(proto, "clearDirty", ClearDirty);
-
-  Nan::SetMethod(proto, "uniform1f", glCallWrap<Uniform1f>);
-  Nan::SetMethod(proto, "uniform2f", glCallWrap<Uniform2f>);
-  Nan::SetMethod(proto, "uniform3f", glCallWrap<Uniform3f>);
-  Nan::SetMethod(proto, "uniform4f", glCallWrap<Uniform4f>);
-  Nan::SetMethod(proto, "uniform1i", glCallWrap<Uniform1i>);
-  Nan::SetMethod(proto, "uniform2i", glCallWrap<Uniform2i>);
-  Nan::SetMethod(proto, "uniform3i", glCallWrap<Uniform3i>);
-  Nan::SetMethod(proto, "uniform4i", glCallWrap<Uniform4i>);
-  Nan::SetMethod(proto, "uniform1ui", glCallWrap<Uniform1ui>);
-  Nan::SetMethod(proto, "uniform2ui", glCallWrap<Uniform2ui>);
-  Nan::SetMethod(proto, "uniform3ui", glCallWrap<Uniform3ui>);
-  Nan::SetMethod(proto, "uniform4ui", glCallWrap<Uniform4ui>);
-  Nan::SetMethod(proto, "uniform1fv", glCallWrap<Uniform1fv>);
-  Nan::SetMethod(proto, "uniform2fv", glCallWrap<Uniform2fv>);
-  Nan::SetMethod(proto, "uniform3fv", glCallWrap<Uniform3fv>);
-  Nan::SetMethod(proto, "uniform4fv", glCallWrap<Uniform4fv>);
-  Nan::SetMethod(proto, "uniform1iv", glCallWrap<Uniform1iv>);
-  Nan::SetMethod(proto, "uniform2iv", glCallWrap<Uniform2iv>);
-  Nan::SetMethod(proto, "uniform3iv", glCallWrap<Uniform3iv>);
-  Nan::SetMethod(proto, "uniform4iv", glCallWrap<Uniform4iv>);
-
-  Nan::SetMethod(proto, "uniform1uiv", glCallWrap<Uniform1uiv>);
-  Nan::SetMethod(proto, "uniform2uiv", glCallWrap<Uniform2uiv>);
-  Nan::SetMethod(proto, "uniform3uiv", glCallWrap<Uniform3uiv>);
-  Nan::SetMethod(proto, "uniform4uiv", glCallWrap<Uniform4uiv>);
-  Nan::SetMethod(proto, "uniformMatrix2fv", glCallWrap<UniformMatrix2fv>);
-  Nan::SetMethod(proto, "uniformMatrix3fv", glCallWrap<UniformMatrix3fv>);
-  Nan::SetMethod(proto, "uniformMatrix4fv", glCallWrap<UniformMatrix4fv>);
-  Nan::SetMethod(proto, "uniformMatrix3x2fv", glCallWrap<UniformMatrix3x2fv>);
-  Nan::SetMethod(proto, "uniformMatrix4x2fv", glCallWrap<UniformMatrix4x2fv>);
-  Nan::SetMethod(proto, "uniformMatrix2x3fv", glCallWrap<UniformMatrix2x3fv>);
-  Nan::SetMethod(proto, "uniformMatrix4x3fv", glCallWrap<UniformMatrix4x3fv>);
-  Nan::SetMethod(proto, "uniformMatrix2x4fv", glCallWrap<UniformMatrix2x4fv>);
-  Nan::SetMethod(proto, "uniformMatrix3x4fv", glCallWrap<UniformMatrix3x4fv>);
-
-  Nan::SetMethod(proto, "pixelStorei", glCallWrap<PixelStorei>);
-  Nan::SetMethod(proto, "bindAttribLocation", glCallWrap<BindAttribLocation>);
-  Nan::SetMethod(proto, "getError", glCallWrap<GetError>);
-  Nan::SetMethod(proto, "drawArrays", glCallWrap<DrawArrays>);
-  Nan::SetMethod(proto, "drawArraysInstanced", glCallWrap<DrawArraysInstanced>);
-  Nan::SetMethod(proto, "drawArraysInstancedANGLE", glCallWrap<DrawArraysInstancedANGLE>);
-
-  Nan::SetMethod(proto, "generateMipmap", glCallWrap<GenerateMipmap>);
-
-  Nan::SetMethod(proto, "getAttribLocation", glCallWrap<GetAttribLocation>);
-  Nan::SetMethod(proto, "depthFunc", glCallWrap<DepthFunc>);
-  Nan::SetMethod(proto, "viewport", glCallWrap<Viewport>);
-  Nan::SetMethod(proto, "createShader", glCallWrap<CreateShader>);
-  Nan::SetMethod(proto, "shaderSource", glCallWrap<ShaderSource>);
-  Nan::SetMethod(proto, "compileShader", glCallWrap<CompileShader>);
-  Nan::SetMethod(proto, "getShaderParameter", glCallWrap<GetShaderParameter>);
-  Nan::SetMethod(proto, "getShaderInfoLog", glCallWrap<GetShaderInfoLog>);
-  Nan::SetMethod(proto, "createProgram", glCallWrap<CreateProgram>);
-  Nan::SetMethod(proto, "attachShader", glCallWrap<AttachShader>);
-  Nan::SetMethod(proto, "linkProgram", glCallWrap<LinkProgram>);
-  Nan::SetMethod(proto, "getProgramParameter", glCallWrap<GetProgramParameter>);
-  Nan::SetMethod(proto, "getUniformLocation", glCallWrap<GetUniformLocation>);
-  Nan::SetMethod(proto, "getUniformBlockIndex", glCallWrap<GetUniformBlockIndex>);
-  Nan::SetMethod(proto, "uniformBlockBinding", glCallWrap<UniformBlockBinding>);
-  Nan::SetMethod(proto, "getUniform", glCallWrap<GetUniform>);
-  Nan::SetMethod(proto, "clearColor", glCallWrap<ClearColor>);
-  Nan::SetMethod(proto, "clearDepth", glCallWrap<ClearDepth>);
-
-  Nan::SetMethod(proto, "disable", glCallWrap<Disable>);
-  Nan::SetMethod(proto, "createTexture", glCallWrap<CreateTexture>);
-  Nan::SetMethod(proto, "bindTexture", glCallWrap<BindTexture>);
-  // Nan::SetMethod(proto, "flipTextureData", glCallWrap<FlipTextureData>);
-  Nan::SetMethod(proto, "texImage2D", glCallWrap<TexImage2D>);
-  Nan::SetMethod(proto, "compressedTexImage2D", glCallWrap<CompressedTexImage2D>);
-  Nan::SetMethod(proto, "texParameteri", glCallWrap<TexParameteri>);
-  Nan::SetMethod(proto, "texParameterf", glCallWrap<TexParameterf>);
-  Nan::SetMethod(proto, "clear", glCallWrap<Clear>);
-  Nan::SetMethod(proto, "useProgram", glCallWrap<UseProgram>);
-  Nan::SetMethod(proto, "createFramebuffer", glCallWrap<CreateFramebuffer>);
-  Nan::SetMethod(proto, "bindFramebuffer", glCallWrap<BindFramebuffer>);
-  Nan::SetMethod(proto, "bindFramebufferRaw", glCallWrap<BindFramebufferRaw>);
-  Nan::SetMethod(proto, "framebufferTexture2D", glCallWrap<FramebufferTexture2D>);
-  Nan::SetMethod(proto, "blitFramebuffer", glCallWrap<BlitFramebuffer>);
-  Nan::SetMethod(proto, "createBuffer", glCallWrap<CreateBuffer>);
-  Nan::SetMethod(proto, "bindBuffer", glCallWrap<BindBuffer>);
-  Nan::SetMethod(proto, "bindBufferBase", glCallWrap<BindBufferBase>);
-  Nan::SetMethod(proto, "bufferData", glCallWrap<BufferData>);
-  Nan::SetMethod(proto, "bufferSubData", glCallWrap<BufferSubData>);
-  Nan::SetMethod(proto, "enable", glCallWrap<Enable>);
-  Nan::SetMethod(proto, "blendEquation", glCallWrap<BlendEquation>);
-  Nan::SetMethod(proto, "blendFunc", glCallWrap<BlendFunc>);
-  Nan::SetMethod(proto, "enableVertexAttribArray", glCallWrap<EnableVertexAttribArray>);
-  Nan::SetMethod(proto, "vertexAttribPointer", glCallWrap<VertexAttribPointer>);
-  Nan::SetMethod(proto, "vertexAttribIPointer", glCallWrap<VertexAttribIPointer>);
-  Nan::SetMethod(proto, "activeTexture", glCallWrap<ActiveTexture>);
-  Nan::SetMethod(proto, "drawElements", glCallWrap<DrawElements>);
-  Nan::SetMethod(proto, "drawElementsInstanced", glCallWrap<DrawElementsInstanced>);
-  Nan::SetMethod(proto, "drawElementsInstancedANGLE", glCallWrap<DrawElementsInstancedANGLE>);
-  Nan::SetMethod(proto, "drawRangeElements", glCallWrap<DrawRangeElements>);
-  Nan::SetMethod(proto, "flush", glCallWrap<Flush>);
-  Nan::SetMethod(proto, "finish", glCallWrap<Finish>);
-
-  Nan::SetMethod(proto, "vertexAttrib1f", glCallWrap<VertexAttrib1f>);
-  Nan::SetMethod(proto, "vertexAttrib2f", glCallWrap<VertexAttrib2f>);
-  Nan::SetMethod(proto, "vertexAttrib3f", glCallWrap<VertexAttrib3f>);
-  Nan::SetMethod(proto, "vertexAttrib4f", glCallWrap<VertexAttrib4f>);
-  Nan::SetMethod(proto, "vertexAttrib1fv", glCallWrap<VertexAttrib1fv>);
-  Nan::SetMethod(proto, "vertexAttrib2fv", glCallWrap<VertexAttrib2fv>);
-  Nan::SetMethod(proto, "vertexAttrib3fv", glCallWrap<VertexAttrib3fv>);
-  Nan::SetMethod(proto, "vertexAttrib4fv", glCallWrap<VertexAttrib4fv>);
-
-  Nan::SetMethod(proto, "vertexAttribI4i", glCallWrap<VertexAttribI4i>);
-  Nan::SetMethod(proto, "vertexAttribI4iv", glCallWrap<VertexAttribI4iv>);
-  Nan::SetMethod(proto, "vertexAttribI4ui", glCallWrap<VertexAttribI4ui>);
-  Nan::SetMethod(proto, "vertexAttribI4uiv", glCallWrap<VertexAttribI4uiv>);
-
-  Nan::SetMethod(proto, "vertexAttribDivisor", glCallWrap<VertexAttribDivisor>);
-  Nan::SetMethod(proto, "vertexAttribDivisorANGLE", glCallWrap<VertexAttribDivisorANGLE>);
-  Nan::SetMethod(proto, "drawBuffers", glCallWrap<DrawBuffers>);
-  Nan::SetMethod(proto, "drawBuffersWEBGL", glCallWrap<DrawBuffersWEBGL>);
-
-  Nan::SetMethod(proto, "blendColor", glCallWrap<BlendColor>);
-  Nan::SetMethod(proto, "blendEquationSeparate", glCallWrap<BlendEquationSeparate>);
-  Nan::SetMethod(proto, "blendFuncSeparate", glCallWrap<BlendFuncSeparate>);
-  Nan::SetMethod(proto, "clearStencil", glCallWrap<ClearStencil>);
-  Nan::SetMethod(proto, "colorMask", glCallWrap<ColorMask>);
-  Nan::SetMethod(proto, "copyTexImage2D", glCallWrap<CopyTexImage2D>);
-  Nan::SetMethod(proto, "copyTexSubImage2D", glCallWrap<CopyTexSubImage2D>);
-  Nan::SetMethod(proto, "cullFace", glCallWrap<CullFace>);
-  Nan::SetMethod(proto, "depthMask", glCallWrap<DepthMask>);
-  Nan::SetMethod(proto, "depthRange", glCallWrap<DepthRange>);
-  Nan::SetMethod(proto, "disableVertexAttribArray", glCallWrap<DisableVertexAttribArray>);
-  Nan::SetMethod(proto, "hint", glCallWrap<Hint>);
-  Nan::SetMethod(proto, "isEnabled", glCallWrap<IsEnabled>);
-  Nan::SetMethod(proto, "lineWidth", glCallWrap<LineWidth>);
-  Nan::SetMethod(proto, "polygonOffset", glCallWrap<PolygonOffset>);
-
-  Nan::SetMethod(proto, "scissor", glCallWrap<Scissor>);
-  Nan::SetMethod(proto, "stencilFunc", glCallWrap<StencilFunc>);
-  Nan::SetMethod(proto, "stencilFuncSeparate", glCallWrap<StencilFuncSeparate>);
-  Nan::SetMethod(proto, "stencilMask", glCallWrap<StencilMask>);
-  Nan::SetMethod(proto, "stencilMaskSeparate", glCallWrap<StencilMaskSeparate>);
-  Nan::SetMethod(proto, "stencilOp", glCallWrap<StencilOp>);
-  Nan::SetMethod(proto, "stencilOpSeparate", glCallWrap<StencilOpSeparate>);
-  Nan::SetMethod(proto, "bindRenderbuffer", glCallWrap<BindRenderbuffer>);
-  Nan::SetMethod(proto, "createRenderbuffer", glCallWrap<CreateRenderbuffer>);
-
-  Nan::SetMethod(proto, "deleteBuffer", glCallWrap<DeleteBuffer>);
-  Nan::SetMethod(proto, "deleteFramebuffer", glCallWrap<DeleteFramebuffer>);
-  Nan::SetMethod(proto, "deleteProgram", glCallWrap<DeleteProgram>);
-  Nan::SetMethod(proto, "deleteRenderbuffer", glCallWrap<DeleteRenderbuffer>);
-  Nan::SetMethod(proto, "deleteShader", glCallWrap<DeleteShader>);
-  Nan::SetMethod(proto, "deleteTexture", glCallWrap<DeleteTexture>);
-  Nan::SetMethod(proto, "detachShader", glCallWrap<DetachShader>);
-  Nan::SetMethod(proto, "framebufferRenderbuffer", glCallWrap<FramebufferRenderbuffer>);
-  Nan::SetMethod(proto, "getVertexAttribOffset", glCallWrap<GetVertexAttribOffset>);
-  Nan::SetMethod(proto, "getShaderPrecisionFormat", glCallWrap<GetShaderPrecisionFormat>);
-
-  Nan::SetMethod(proto, "isBuffer", glCallWrap<IsBuffer>);
-  Nan::SetMethod(proto, "isFramebuffer", glCallWrap<IsFramebuffer>);
-  Nan::SetMethod(proto, "isProgram", glCallWrap<IsProgram>);
-  Nan::SetMethod(proto, "isRenderbuffer", glCallWrap<IsRenderbuffer>);
-  Nan::SetMethod(proto, "isShader", glCallWrap<IsShader>);
-  Nan::SetMethod(proto, "isTexture", glCallWrap<IsTexture>);
-  Nan::SetMethod(proto, "isVertexArray", glCallWrap<IsVertexArray>);
-  Nan::SetMethod(proto, "isSync", glCallWrap<IsSync>);
-
-  Nan::SetMethod(proto, "renderbufferStorage", glCallWrap<RenderbufferStorage>);
-  Nan::SetMethod(proto, "getShaderSource", glCallWrap<GetShaderSource>);
-  Nan::SetMethod(proto, "validateProgram", glCallWrap<ValidateProgram>);
-
-  Nan::SetMethod(proto, "texSubImage2D", glCallWrap<TexSubImage2D>);
-  Nan::SetMethod(proto, "texStorage2D", glCallWrap<TexStorage2D>);
-
-  Nan::SetMethod(proto, "readPixels", glCallWrap<ReadPixels>);
-  Nan::SetMethod(proto, "getTexParameter", glCallWrap<GetTexParameter>);
-  Nan::SetMethod(proto, "getActiveAttrib", glCallWrap<GetActiveAttrib>);
-  Nan::SetMethod(proto, "getActiveUniform", glCallWrap<GetActiveUniform>);
-  Nan::SetMethod(proto, "getAttachedShaders", glCallWrap<GetAttachedShaders>);
-  Nan::SetMethod(proto, "getParameter", glCallWrap<GetParameter>);
-  Nan::SetMethod(proto, "getBufferParameter", glCallWrap<GetBufferParameter>);
-  Nan::SetMethod(proto, "getFramebufferAttachmentParameter", glCallWrap<GetFramebufferAttachmentParameter>);
-  Nan::SetMethod(proto, "getProgramInfoLog", glCallWrap<GetProgramInfoLog>);
-  Nan::SetMethod(proto, "getRenderbufferParameter", glCallWrap<GetRenderbufferParameter>);
-  Nan::SetMethod(proto, "getVertexAttrib", glCallWrap<GetVertexAttrib>);
-  Nan::SetMethod(proto, "getShaderPrecisionFormat", glCallWrap<GetShaderPrecisionFormat>);
-  Nan::SetMethod(proto, "getSupportedExtensions", glCallWrap<GetSupportedExtensions>);
-  Nan::SetMethod(proto, "getExtension", glCallWrap<GetExtension>);
-  Nan::SetMethod(proto, "getContextAttributes", glCallWrap<GetContextAttributes>);
-
-  Nan::SetMethod(proto, "checkFramebufferStatus", glCallWrap<CheckFramebufferStatus>);
-
-  Nan::SetMethod(proto, "createVertexArray", glCallWrap<CreateVertexArray>);
-  Nan::SetMethod(proto, "deleteVertexArray", glCallWrap<DeleteVertexArray>);
-  Nan::SetMethod(proto, "bindVertexArray", glCallWrap<BindVertexArray>);
-
-  Nan::SetMethod(proto, "fenceSync", glCallWrap<FenceSync>);
-  Nan::SetMethod(proto, "deleteSync", glCallWrap<DeleteSync>);
-  Nan::SetMethod(proto, "clientWaitSync", glCallWrap<ClientWaitSync>);
-  Nan::SetMethod(proto, "waitSync", glCallWrap<WaitSync>);
-  Nan::SetMethod(proto, "getSyncParameter", glCallWrap<GetSyncParameter>);
-
-  Nan::SetMethod(proto, "frontFace", glCallWrap<FrontFace>);
-
-  Nan::SetMethod(proto, "isContextLost", glCallWrap<IsContextLost>);
-
-  Nan::SetAccessor(proto, JS_STR("drawingBufferWidth"), glGetterWrap<DrawingBufferWidthGetter>);
-  Nan::SetAccessor(proto, JS_STR("drawingBufferHeight"), glGetterWrap<DrawingBufferHeightGetter>);
-
-  /* Nan::SetMethod(proto, "getFramebuffer", glSwitchCallWrap<GetFramebuffer>);
-  Nan::SetMethod(proto, "setDefaultFramebuffer", glSwitchCallWrap<SetDefaultFramebuffer>); */
-  Nan::SetMethod(proto, "getFramebuffer", glCallWrap<GetFramebuffer>);
-  Nan::SetMethod(proto, "setDefaultFramebuffer", glCallWrap<SetDefaultFramebuffer>);
-
-  setGlConstants(proto);
-
-  // ctor
-  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
-  setGlConstants(ctorFn);
-
-  return std::pair<Local<Object>, Local<FunctionTemplate>>(ctorFn, ctor);
-}
-
-WebGLRenderingContext::WebGLRenderingContext() :
-  live(true),
-  windowHandle(nullptr),
-  defaultVao(0),
-  dirty(false),
-  defaultFramebuffer(0),
-  flipY(false),
-  premultiplyAlpha(true),
-  packAlignment(4),
-  unpackAlignment(4),
-  activeTexture(GL_TEXTURE0)
-  {}
-
-WebGLRenderingContext::~WebGLRenderingContext() {}
-
-NAN_METHOD(WebGLRenderingContext::New) {
-  WebGLRenderingContext *gl = new WebGLRenderingContext();
-  Local<Object> glObj = info.This();
-  gl->Wrap(glObj);
-
-  info.GetReturnValue().Set(glObj);
-}
-
-NAN_METHOD(WebGLRenderingContext::Destroy) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  gl->live = false;
-}
-
-NAN_METHOD(WebGLRenderingContext::GetWindowHandle) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  if (gl->windowHandle) {
-    info.GetReturnValue().Set(pointerToArray(gl->windowHandle));
+    MaybeLocal<Number> widthValue(Nan::To<Number>(valueObject.ToLocalChecked()->Get(widthString)));
+    MaybeLocal<Number> heightValue(Nan::To<Number>(valueObject.ToLocalChecked()->Get(heightString)));
+    return !widthValue.IsEmpty() && !heightValue.IsEmpty();
   } else {
-    info.GetReturnValue().Set(Nan::Null());
+    return false;
   }
 }
 
-NAN_METHOD(WebGLRenderingContext::SetWindowHandle) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  if (info[0]->IsArray()) {
-    gl->windowHandle = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
-  } else {
-    gl->windowHandle = nullptr;
+size_t getFormatSize(int format) {
+  switch (format) {
+    case GL_RED:
+    case GL_RED_INTEGER:
+    case GL_DEPTH_COMPONENT:
+    case GL_LUMINANCE:
+    case GL_ALPHA:
+      return 1;
+    case GL_RG:
+    case GL_RG_INTEGER:
+    case GL_DEPTH_STENCIL:
+    case GL_LUMINANCE_ALPHA:
+      return 2;
+    case GL_RGB:
+    case GL_RGB_INTEGER:
+      return 3;
+    case GL_RGBA:
+    case GL_RGBA_INTEGER:
+      return 4;
+    default:
+      return 4;
   }
 }
 
-NAN_METHOD(WebGLRenderingContext::SetDefaultVao) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  gl->defaultVao = TO_UINT32(info[0]);
+size_t getTypeSize(int type) {
+  switch (type) {
+    case GL_UNSIGNED_BYTE:
+    case GL_BYTE:
+      return 1;
+    case GL_UNSIGNED_SHORT:
+    case GL_SHORT:
+    case GL_HALF_FLOAT:
+    case GL_UNSIGNED_SHORT_5_6_5:
+    case GL_UNSIGNED_SHORT_4_4_4_4:
+    case GL_UNSIGNED_SHORT_5_5_5_1:
+      return 2;
+    case GL_UNSIGNED_INT:
+    case GL_INT:
+    case GL_FLOAT:
+    case GL_UNSIGNED_INT_2_10_10_10_REV:
+    case GL_UNSIGNED_INT_10F_11F_11F_REV:
+    case GL_UNSIGNED_INT_5_9_9_9_REV:
+    case GL_UNSIGNED_INT_24_8:
+    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+      return 4;
+    default:
+      return 4;
+  }
 }
 
-NAN_METHOD(WebGLRenderingContext::IsDirty) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  info.GetReturnValue().Set(JS_BOOL(gl->dirty));
+int formatMap[] = {
+  GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE,
+  GL_RGBA8_SNORM, GL_RGBA, GL_BYTE,
+  GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4,
+  GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV,
+  GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1,
+  GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT,
+  GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT_OES,
+  GL_RGBA32F, GL_RGBA, GL_FLOAT,
+  GL_RGBA8UI, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,
+  GL_RGBA8I, GL_RGBA_INTEGER, GL_BYTE,
+  GL_RGBA16UI, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT,
+  GL_RGBA16I, GL_RGBA_INTEGER, GL_SHORT,
+  GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT,
+  GL_RGBA32I, GL_RGBA_INTEGER, GL_INT,
+  GL_RGB10_A2UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,
+  GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE,
+  GL_RGB8_SNORM, GL_RGB, GL_BYTE,
+  GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+  GL_R11F_G11F_B10F, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV,
+  GL_RGB9_E5, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV,
+  GL_RGB16F, GL_RGB, GL_HALF_FLOAT,
+  GL_RGB16F, GL_RGB, GL_HALF_FLOAT_OES,
+  GL_RGB32F, GL_RGB, GL_FLOAT,
+  GL_RGB8UI, GL_RGB_INTEGER, GL_UNSIGNED_BYTE,
+  GL_RGB8I, GL_RGB_INTEGER, GL_BYTE,
+  GL_RGB16UI, GL_RGB_INTEGER, GL_UNSIGNED_SHORT,
+  GL_RGB16I, GL_RGB_INTEGER, GL_SHORT,
+  GL_RGB32UI, GL_RGB_INTEGER, GL_UNSIGNED_INT,
+  GL_RGB32I, GL_RGB_INTEGER, GL_INT,
+  GL_RG8, GL_RG, GL_UNSIGNED_BYTE,
+  GL_RG8_SNORM, GL_RG, GL_BYTE,
+  GL_RG16F, GL_RG, GL_HALF_FLOAT,
+  GL_RG16F, GL_RG, GL_HALF_FLOAT_OES,
+  GL_RG32F, GL_RG, GL_FLOAT,
+  GL_RG8UI, GL_RG_INTEGER, GL_UNSIGNED_BYTE,
+  GL_RG8I, GL_RG_INTEGER, GL_BYTE,
+  GL_RG16UI, GL_RG_INTEGER, GL_UNSIGNED_SHORT,
+  GL_RG16I, GL_RG_INTEGER, GL_SHORT,
+  GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT,
+  GL_RG32I, GL_RG_INTEGER, GL_INT,
+  GL_R8, GL_RED, GL_UNSIGNED_BYTE,
+  GL_R8_SNORM, GL_RED, GL_BYTE,
+  GL_R16F, GL_RED, GL_HALF_FLOAT,
+  GL_R16F, GL_RED, GL_HALF_FLOAT_OES,
+  GL_R32F, GL_RED, GL_FLOAT,
+  GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE,
+  GL_R8I, GL_RED_INTEGER, GL_BYTE,
+  GL_R16UI, GL_RED_INTEGER, GL_UNSIGNED_SHORT,
+  GL_R16I, GL_RED_INTEGER, GL_SHORT,
+  GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT,
+  GL_R32I, GL_RED_INTEGER, GL_INT,
+};
+
+int normalizeInternalFormat(int internalformat, int format, int type) {
+  if (internalformat == GL_RED || internalformat == GL_RG || internalformat == GL_RGB || internalformat == GL_RGBA) {
+    for (size_t i = 0; i < sizeof(formatMap)/3; i++) {
+      int b = formatMap[i * 3 + 1];
+      int c = formatMap[i * 3 + 2];
+      if (format == b && type == c) {
+        int a = formatMap[i * 3 + 0];
+        internalformat = a;
+        break;
+      }
+    }
+  }
+  return internalformat;
 }
 
-NAN_METHOD(WebGLRenderingContext::ClearDirty) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  gl->dirty = false;
+int getImageFormat(Local<Value> arg) {
+  if (arg->IsArrayBufferView()) {
+    return -1;
+  } else {
+    Local<Value> constructorName = JS_OBJ(JS_OBJ(arg)->Get(JS_STR("constructor")))->Get(JS_STR("name"));
+    if (
+      constructorName->StrictEquals(JS_STR("HTMLImageElement")) ||
+      constructorName->StrictEquals(JS_STR("HTMLVideoElement")) ||
+      constructorName->StrictEquals(JS_STR("ImageData")) ||
+      constructorName->StrictEquals(JS_STR("ImageBitmap")) ||
+      constructorName->StrictEquals(JS_STR("HTMLCanvasElement"))
+    ) {
+      return GL_RGBA;
+    } else {
+      return -1;
+    }
+  }
 }
 
-// GL CALLS
+size_t getArrayBufferViewElementSize(Local<ArrayBufferView> arrayBufferView) {
+  if (arrayBufferView->IsFloat64Array()) {
+    return 8;
+  } else if (arrayBufferView->IsFloat32Array() || arrayBufferView->IsUint32Array() || arrayBufferView->IsInt32Array()) {
+    return 4;
+  } else if (arrayBufferView->IsUint16Array() || arrayBufferView->IsInt16Array()) {
+    return 2;
+  } else {
+    return 1;
+  }
+}
 
 // A 32-bit and 64-bit compatible way of converting a pointer to a GLuint.
-static GLuint ToGLuint(const void* ptr) {
+static GLuint toGLuint(const void* ptr) {
   return static_cast<GLuint>(reinterpret_cast<size_t>(ptr));
 }
 
@@ -1350,6 +1228,1112 @@ void expandLuminanceAlpha(char *dstData, char *srcData, size_t width, size_t hei
     ((T *)dstData)[i * 4 + 3] = alpha;
   }
 }
+
+// templates
+
+template<int d>
+inline void glTexImage(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid *data);
+template<>
+inline void glTexImage<2>(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid *data) {
+  glTexImage2D(target, level, internalformat, width, height, border, format, type, data);
+}
+template<>
+inline void glTexImage<3>(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid *data) {
+  glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, data);
+}
+template<int d>
+void TexImage(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  Isolate *isolate = Isolate::GetCurrent();
+
+  Local<Value> target;
+  Local<Value> level;
+  Local<Value> internalformat;
+  Local<Value> width;
+  Local<Value> height;
+  Local<Value> depth;
+  Local<Value> border;
+  Local<Value> format;
+  Local<Value> type;
+  Local<Value> pixels;
+  Local<Value> srcOffset;
+
+  if (d == 2) {
+    target = info[0];
+    level = info[1];
+    internalformat = info[2];
+    width = info[3];
+    height = info[4];
+    border = info[5];
+    format = info[6];
+    type = info[7];
+    pixels = info[8];
+    srcOffset = info[9];
+  } else {
+    target = info[0];
+    level = info[1];
+    internalformat = info[2];
+    width = info[3];
+    height = info[4];
+    depth = info[5];
+    border = info[6];
+    format = info[7];
+    type = info[8];
+    pixels = info[9];
+    srcOffset = info[10];
+  }
+
+  Local<String> widthString = String::NewFromUtf8(isolate, "width", NewStringType::kInternalized).ToLocalChecked();
+  Local<String> heightString = String::NewFromUtf8(isolate, "height", NewStringType::kInternalized).ToLocalChecked();
+
+  if (info.Length() == 6) {
+    // width is now format, height is now type, and border is now pixels
+    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
+    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
+    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
+    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
+    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
+    if (
+      !targetNumber.IsEmpty() &&
+      !levelNumber.IsEmpty() && !internalformatNumber.IsEmpty() &&
+      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
+      (border->IsNull() || hasWidthHeight(border))
+    ) {
+      pixels=border;
+      /* if (pixels) {
+        pixels = _getImageData(pixels);
+      } */
+      type=height;
+      format=width;
+      width = TO_BOOL(border) ? JS_OBJ(border)->Get(widthString) : Number::New(isolate, 1).As<Value>();
+      height = TO_BOOL(border) ? JS_OBJ(border)->Get(heightString) : Number::New(isolate, 1).As<Value>();
+      // return _texImage2D(target, level, internalformat, width, height, 0, format, type, pixels);
+    } else {
+      /* LOGI("Loaded string asset %d %d %d %d %d %d %d %d %d",
+        target->TypeOf(isolate)->StrictEquals(numberString),
+        level->TypeOf(isolate)->StrictEquals(numberString),
+        internalformat->TypeOf(isolate)->StrictEquals(numberString),
+        width->TypeOf(isolate)->StrictEquals(numberString),
+        height->TypeOf(isolate)->StrictEquals(numberString),
+        border->IsNull(), // 0
+        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString), // 1
+        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString) && JS_OBJ(border)->Get(widthString)->TypeOf(isolate)->StrictEquals(numberString), // 0
+        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString) && JS_OBJ(border)->Get(heightString)->TypeOf(isolate)->StrictEquals(numberString) // 0
+      ); */
+
+      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number format, number type, Image pixels)");
+      return;
+    }
+  } else if (info.Length() == 9) {
+    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
+    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
+    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
+    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
+    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
+    MaybeLocal<Number> formatNumber(Nan::To<Number>(format));
+    MaybeLocal<Number> typeNumber(Nan::To<Number>(type));
+    if (
+      !targetNumber.IsEmpty() &&
+      !levelNumber.IsEmpty() && !internalformat.IsEmpty() &&
+      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
+      !formatNumber.IsEmpty() && !typeNumber.IsEmpty() &&
+      (pixels->IsNull() || pixels->IsObject() || pixels->IsNumber())
+    ) {
+      // nothing
+    } else {
+      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView pixels)");
+      return;
+    }
+  } else if (info.Length() == 10) {
+    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
+    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
+    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
+    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
+    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
+    MaybeLocal<Number> formatNumber(Nan::To<Number>(format));
+    MaybeLocal<Number> typeNumber(Nan::To<Number>(type));
+    MaybeLocal<Number> srcOffsetNumber(Nan::To<Number>(srcOffset));
+    if (
+      !targetNumber.IsEmpty() &&
+      !levelNumber.IsEmpty() && !internalformat.IsEmpty() &&
+      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
+      !formatNumber.IsEmpty() && !typeNumber.IsEmpty()
+    ) {
+      if (pixels->IsArrayBufferView() && !srcOffsetNumber.IsEmpty()) {
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
+        size_t srcOffsetInt = TO_UINT32(srcOffset);
+        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+        size_t extraOffset = srcOffsetInt * elementSize;
+        pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
+      } else if (pixels->IsNull() || pixels->IsObject()) {
+        // nothing
+      } else {
+        Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView srcData, number srcOffset)");
+        return;
+      }
+    } else {
+      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView srcData, number srcOffset)");
+      return;
+    }
+  } else {
+    Nan::ThrowError("Bad texture argument");
+    return;
+  }
+
+  GLenum targetV = TO_UINT32(target);
+  GLenum levelV = TO_UINT32(level);
+  GLenum internalformatV = TO_UINT32(internalformat);
+  GLsizei widthV = TO_UINT32(width);
+  GLsizei heightV = TO_UINT32(height);
+  GLsizei depthV = d == 3 ? TO_UINT32(depth) : 0;
+  GLint borderV = TO_INT32(border);
+  GLenum formatV = TO_UINT32(format);
+  GLenum typeV = TO_UINT32(type);
+
+  internalformatV = normalizeInternalFormat(internalformatV, formatV, typeV);
+
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
+  GLuint texV;
+  char *pixelsV;
+  if (pixels->IsNull()) {
+    glTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, formatV, typeV, NULL);
+  } else if (pixels->IsNumber()) {
+    GLintptr offsetV = TO_UINT32(pixels);
+    glTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, formatV, typeV, (void *)offsetV);
+  } else if ((texV = getImageTexture(pixels)) != 0) {
+    glTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, formatV, typeV, NULL);
+
+    GLuint fbos[2];
+    glGenFramebuffers(2, fbos);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
+
+    const bool flipY = d == 2 && gl->HasPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) : false;
+    if (flipY) {
+      glBlitFramebuffer(
+        0, 0, widthV, heightV,
+        0, 0, widthV, heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    } else {
+      glBlitFramebuffer(
+        0, heightV, widthV, 0,
+        0, 0, widthV, heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    }
+
+    // glCopyTexImage2D(targetV, levelV, internalformatV, 0, 0, widthV, heightV, 0);
+
+    glDeleteFramebuffers(2, fbos);
+
+    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+  } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
+    size_t formatSize = getFormatSize(formatV);
+    size_t typeSize = getTypeSize(typeV);
+    size_t pixelSize = formatSize * typeSize;
+    int srcFormatV = getImageFormat(pixels);
+    size_t srcFormatSize = getFormatSize(srcFormatV);
+    char *pixelsV2;
+    unique_ptr<char[]> pixelsV2Buffer;
+    bool needsReformat = srcFormatV != -1 && formatSize != srcFormatSize;
+    if (needsReformat) {
+      pixelsV2Buffer.reset(new char[widthV * heightV * pixelSize]);
+      pixelsV2 = pixelsV2Buffer.get();
+      reformatImageData(pixelsV2, pixelsV, formatSize * typeSize, srcFormatSize * typeSize, widthV * heightV);
+
+      glPixelStorei(GL_PACK_ALIGNMENT, 1);
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    } else {
+      pixelsV2 = pixelsV;
+    }
+
+    const bool flipY = d == 2 && gl->HasPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) : false;
+    if (flipY && !pixels->IsArrayBufferView()) {
+      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
+
+      flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
+
+      glTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, formatV, typeV, pixelsV3Buffer.get());
+    } else if (formatV == GL_LUMINANCE || formatV == GL_ALPHA) {
+      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * 4]);
+
+      if (typeV == GL_UNSIGNED_BYTE) {
+        expandLuminance<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_UNSIGNED_INT) {
+        expandLuminance<unsigned int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_INT) {
+        expandLuminance<int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_UNSIGNED_SHORT) {
+        expandLuminance<unsigned short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_SHORT) {
+        expandLuminance<short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_FLOAT) {
+        expandLuminance<float>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else {
+        expandLuminance<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      }
+
+      glTexImage<d>(targetV, levelV, GL_RGBA8, widthV, heightV, depthV, borderV, GL_RGBA, typeV, pixelsV3Buffer.get());
+    } else if (formatV == GL_LUMINANCE_ALPHA) {
+      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * 4]);
+
+      if (typeV == GL_UNSIGNED_BYTE) {
+        expandLuminanceAlpha<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_UNSIGNED_INT) {
+        expandLuminanceAlpha<unsigned int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_INT) {
+        expandLuminanceAlpha<int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_UNSIGNED_SHORT) {
+        expandLuminanceAlpha<unsigned short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_SHORT) {
+        expandLuminanceAlpha<short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else if (typeV == GL_FLOAT) {
+        expandLuminanceAlpha<float>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      } else {
+        expandLuminanceAlpha<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
+      }
+
+      glTexImage<d>(targetV, levelV, GL_RGBA8, widthV, heightV, depthV, borderV, GL_RGBA, typeV, pixelsV3Buffer.get());
+    } else {
+      glTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, formatV, typeV, pixelsV2);
+    }
+
+    if (gl->HasPixelStoreiBinding(GL_PACK_ALIGNMENT)) {
+      glPixelStorei(GL_PACK_ALIGNMENT, gl->GetPixelStoreiBinding(GL_PACK_ALIGNMENT));
+    } else {
+      glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    }
+    if (gl->HasPixelStoreiBinding(GL_UNPACK_ALIGNMENT)) {
+      glPixelStorei(GL_UNPACK_ALIGNMENT, gl->GetPixelStoreiBinding(GL_UNPACK_ALIGNMENT));
+    } else {
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    }
+  } else {
+    Nan::ThrowError("WebGLRenderingContext::TexImage2D: invalid texture argument");
+  }
+}
+
+template<int d>
+inline void glTexSubImage(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels);
+template<>
+inline void glTexSubImage<2>(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels) {
+  glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+}
+template<>
+inline void glTexSubImage<3>(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels) {
+  glTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels);
+}
+template<int d>
+void TexSubImage(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  GLenum targetV;
+  GLint levelV;
+  GLint xoffsetV;
+  GLint yoffsetV;
+  GLint zoffsetV;
+  GLsizei widthV;
+  GLsizei heightV;
+  GLsizei depthV;
+  GLenum formatV;
+  GLenum typeV;
+  Local<Value> pixels;
+  Local<Value> srcOffset;
+  if (d == 2) {
+    targetV = TO_UINT32(info[0]);
+    levelV = TO_INT32(info[1]);
+    xoffsetV = TO_INT32(info[2]);
+    yoffsetV = TO_INT32(info[3]);
+    zoffsetV = 0;
+    widthV = TO_UINT32(info[4]);
+    heightV = TO_UINT32(info[5]);
+    depthV = 0;
+    formatV = TO_INT32(info[6]);
+    typeV = TO_INT32(info[7]);
+    pixels = info[8];
+    srcOffset = info[9];
+  } else {
+    targetV = TO_UINT32(info[0]);
+    levelV = TO_INT32(info[1]);
+    xoffsetV = TO_INT32(info[2]);
+    yoffsetV = TO_INT32(info[3]);
+    zoffsetV = TO_INT32(info[4]);
+    widthV = TO_UINT32(info[5]);
+    heightV = TO_UINT32(info[6]);
+    depthV = TO_UINT32(info[7]);
+    formatV = TO_INT32(info[8]);
+    typeV = TO_INT32(info[9]);
+    pixels = info[10];
+    srcOffset = info[11];
+  }
+
+  if (pixels->IsArrayBufferView() && srcOffset->IsNumber()) {
+    Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
+    size_t srcOffsetInt = TO_UINT32(srcOffset);
+    size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+    size_t extraOffset = srcOffsetInt * elementSize;
+    pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
+  }
+
+  GLuint texV;
+  char *pixelsV;
+  if (pixels->IsNull()) {
+    glTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, typeV, nullptr);
+  } else if (pixels->IsNumber()) {
+    GLintptr offsetV = TO_UINT32(pixels);
+    glTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, typeV, (void *)offsetV);
+  } else if ((texV = getImageTexture(pixels)) != 0) {
+    GLuint fbos[2];
+    glGenFramebuffers(2, fbos);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
+
+    const bool flipY = d == 2 && gl->HasPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) : false;
+    if (flipY) {
+      glBlitFramebuffer(
+        0, 0, widthV, heightV,
+        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    } else {
+      glBlitFramebuffer(
+        0, heightV, widthV, 0,
+        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+      );
+    }
+
+    // glCopyTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, 0, 0, widthV, heightV);
+
+    glDeleteFramebuffers(2, fbos);
+
+    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
+    } else {
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
+    }
+  } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
+    size_t formatSize = getFormatSize(formatV);
+    size_t typeSize = getTypeSize(typeV);
+    size_t pixelSize = formatSize * typeSize;
+    char *pixelsV2;
+    unique_ptr<char[]> pixelsV2Buffer;
+    if (formatSize != 4 && !pixels->IsArrayBufferView()) {
+      pixelsV2Buffer.reset(new char[widthV * heightV * pixelSize]);
+      pixelsV2 = pixelsV2Buffer.get();
+      reformatImageData(pixelsV2, pixelsV, formatSize * typeSize, 4 * typeSize, widthV * heightV);
+    } else {
+      pixelsV2 = pixelsV;
+    }
+
+    const bool flipY = d == 2 && gl->HasPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) : false;
+    if (flipY && !pixels->IsArrayBufferView()) {
+      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
+      flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
+
+      glTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, typeV, pixelsV3Buffer.get());
+    } else {
+      glTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, typeV, pixelsV2);
+    }
+  } else {
+    Nan::ThrowError("Invalid texture argument");
+  }
+}
+
+template<int d>
+inline void glCompressedTexImage(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data);
+template<>
+inline void glCompressedTexImage<2>(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) {
+  glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
+}
+template<>
+inline void glCompressedTexImage<3>(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) {
+  glCompressedTexImage3D(target, level, internalformat, width, height, depth, border, imageSize, data);
+}
+template<int d>
+void CompressedTexImage(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  Local<Value> target;
+  Local<Value> level;
+  Local<Value> internalformat;
+  Local<Value> width;
+  Local<Value> height;
+  Local<Value> depth;
+  Local<Value> border;
+  if (d == 2) {
+    target = info[0];
+    level = info[1];
+    internalformat = info[2];
+    width = info[3];
+    height = info[4];
+    border = info[5];
+  } else {
+    target = info[0];
+    level = info[1];
+    internalformat = info[2];
+    width = info[3];
+    height = info[4];
+    depth = info[5];
+    border = info[6];
+  }
+
+  int targetV = TO_INT32(target);
+  int levelV = TO_INT32(level);
+  int internalformatV = TO_INT32(internalformat);
+  int widthV = TO_INT32(width);
+  int heightV = TO_INT32(height);
+  int depthV = d == 3 ? TO_INT32(depth) : 0;
+  int borderV = TO_INT32(border);
+
+  if (d == 2) {
+    if (info.Length() == 7) {
+      Local<Value> data = info[6];
+
+      char *dataV;
+      size_t dataLengthV;
+      if (data->IsArrayBufferView()) {
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        dataLengthV = arrayBufferView->ByteLength();
+      } else if (info[6]->IsNull()) {
+        dataV = nullptr;
+        dataLengthV = 0;
+      } else {
+        return Nan::ThrowError("compressedTexImage2D: invalid arguments");
+      }
+
+      glCompressedTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, dataLengthV, dataV);
+    } else if (info.Length() >= 7) {
+      if (info[6]->IsNumber() && info[7]->IsNumber()) {
+        Local<Value> imageSize = info[6];
+        Local<Value> offset = info[7];
+
+        GLsizei imageSizeV = TO_UINT32(imageSize);
+        GLintptr offsetV = (GLintptr)TO_UINT32(offset);
+
+        glCompressedTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, imageSizeV, (GLvoid *)offsetV);
+      } else if (info[6]->IsArrayBufferView()) {
+        Local<Value> data = info[6];
+        Local<Value> srcOffset = info[7];
+        Local<Value> srcLengthOverride = info[8];
+
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        char *dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        size_t dataLengthV = arrayBufferView->ByteLength();
+        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+        if (srcOffset->IsNumber()) {
+          GLuint srcOffsetV = TO_UINT32(srcOffset);
+          dataV += srcOffsetV * elementSize;
+        }
+        if (srcLengthOverride->IsNumber()) {
+          GLuint srcLengthOverrideV = TO_UINT32(srcLengthOverride);
+          size_t newDataLengthV = srcLengthOverrideV * elementSize;
+          if (newDataLengthV <= dataLengthV) {
+            dataLengthV = newDataLengthV;
+          } else {
+            return Nan::ThrowError("compressedTexImage2D: invalid srcLengthOverride");
+          }
+        }
+
+        glCompressedTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, dataLengthV, dataV);
+      } else {
+        return Nan::ThrowError("compressedTexImage2D: invalid arguments");
+      }
+    } else {
+      return Nan::ThrowError("compressedTexImage2D: invalid arguments");
+    }
+  } else {
+    if (info.Length() >= 8) {
+      if (info[7]->IsNumber() && info[8]->IsNumber()) {
+        Local<Value> imageSize = info[6];
+        Local<Value> offset = info[7];
+
+        GLsizei imageSizeV = TO_UINT32(imageSize);
+        GLintptr offsetV = (GLintptr)TO_UINT32(offset);
+
+        glCompressedTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, imageSizeV, (GLvoid *)offsetV);
+      } else if (info[7]->IsArrayBufferView()) {
+        Local<Value> data = info[7];
+        Local<Value> srcOffset = info[8];
+        Local<Value> srcLengthOverride = info[9];
+
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        char *dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        size_t dataLengthV = arrayBufferView->ByteLength();
+        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+        if (srcOffset->IsNumber()) {
+          GLuint srcOffsetV = TO_UINT32(srcOffset);
+          dataV += srcOffsetV * elementSize;
+        }
+        if (srcLengthOverride->IsNumber()) {
+          GLuint srcLengthOverrideV = TO_UINT32(srcLengthOverride);
+          size_t newDataLengthV = srcLengthOverrideV * elementSize;
+          if (newDataLengthV <= dataLengthV) {
+            dataLengthV = newDataLengthV;
+          } else {
+            return Nan::ThrowError("compressedTexImage3D: invalid srcLengthOverride");
+          }
+        }
+
+        glCompressedTexImage<d>(targetV, levelV, internalformatV, widthV, heightV, depthV, borderV, dataLengthV, dataV);
+      } else {
+        return Nan::ThrowError("compressedTexImage3D: invalid arguments");
+      }
+    } else {
+      return Nan::ThrowError("compressedTexImage3D: invalid arguments");
+    }
+  }
+}
+
+template<int d>
+inline void glCompressedTexSubImage(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data);
+template<>
+inline void glCompressedTexSubImage<2>(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data) {
+  glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
+}
+template<>
+inline void glCompressedTexSubImage<3>(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data) {
+  glCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data);
+}
+template<int d>
+void CompressedTexSubImage(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  Local<Value> target;
+  Local<Value> level;
+  Local<Value> xoffset;
+  Local<Value> yoffset;
+  Local<Value> zoffset;
+  Local<Value> width;
+  Local<Value> height;
+  Local<Value> depth;
+  Local<Value> format;
+  if (d == 2) {
+    target = info[0];
+    level = info[1];
+    xoffset = info[2];
+    yoffset = info[3];
+    width = info[4];
+    height = info[5];
+    format = info[6];
+  } else {
+    target = info[0];
+    level = info[1];
+    xoffset = info[2];
+    yoffset = info[3];
+    zoffset = info[4];
+    width = info[5];
+    height = info[6];
+    depth = info[7];
+    format = info[8];
+  }
+
+  int targetV = TO_INT32(target);
+  int levelV = TO_INT32(level);
+  int xoffsetV = TO_INT32(xoffset);
+  int yoffsetV = TO_INT32(yoffset);
+  int zoffsetV = d == 3 ? TO_INT32(zoffset) : 0;
+  int widthV = TO_INT32(width);
+  int heightV = TO_INT32(height);
+  int depthV = d == 3 ? TO_INT32(depth) : 0;
+  int formatV = TO_INT32(format);
+
+  if (d == 2) {
+    if (info.Length() == 8) {
+      Local<Value> data = info[7];
+
+      char *dataV;
+      size_t dataLengthV;
+      if (data->IsArrayBufferView()) {
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        dataLengthV = arrayBufferView->ByteLength();
+      } else if (info[6]->IsNull()) {
+        dataV = nullptr;
+        dataLengthV = 0;
+      } else {
+        return Nan::ThrowError("compressedTexImage2D: invalid arguments");
+      }
+
+      glCompressedTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, dataLengthV, dataV);
+    } else if (info[7]->IsNumber() && info[8]->IsNumber()) {
+      Local<Value> imageSize = info[7];
+      Local<Value> offset = info[8];
+
+      GLsizei imageSizeV = TO_UINT32(imageSize);
+      GLintptr offsetV = (GLintptr)TO_UINT32(offset);
+
+      glCompressedTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, imageSizeV, (GLvoid *)offsetV);
+    } else if (info.Length() >= 8) {
+      if (info[7]->IsArrayBufferView()) {
+        Local<Value> data = info[7];
+        Local<Value> srcOffset = info[8];
+        Local<Value> srcLengthOverride = info[9];
+
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        char *dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        size_t dataLengthV = arrayBufferView->ByteLength();
+        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+        if (srcOffset->IsNumber()) {
+          GLuint srcOffsetV = TO_UINT32(srcOffset);
+          dataV += srcOffsetV * elementSize;
+        }
+        if (srcLengthOverride->IsNumber()) {
+          GLuint srcLengthOverrideV = TO_UINT32(srcLengthOverride);
+          size_t newDataLengthV = srcLengthOverrideV * elementSize;
+          if (newDataLengthV <= dataLengthV) {
+            dataLengthV = newDataLengthV;
+          } else {
+            return Nan::ThrowError("compressedTexSubImage2D: invalid srcLengthOverride");
+          }
+        }
+
+        glCompressedTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, dataLengthV, dataV);
+      } else {
+        return Nan::ThrowError("compressedTexSubImage2D: invalid arguments");
+      }
+    } else {
+      return Nan::ThrowError("compressedTexSubImage2D: invalid arguments");
+    }
+  } else {
+    if (info.Length() >= 10) {
+      if (info[9]->IsNumber() && info[10]->IsNumber()) {
+        Local<Value> imageSize = info[9];
+        Local<Value> offset = info[10];
+
+        GLsizei imageSizeV = TO_UINT32(imageSize);
+        GLintptr offsetV = (GLintptr)TO_UINT32(offset);
+
+        glCompressedTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, imageSizeV, (GLvoid *)offsetV);
+      } else if (info[9]->IsArrayBufferView()) {
+        Local<Value> data = info[9];
+        Local<Value> srcOffset = info[10];
+        Local<Value> srcLengthOverride = info[11];
+
+        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(data);
+        Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
+        char *dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
+        size_t dataLengthV = arrayBufferView->ByteLength();
+        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
+        if (srcOffset->IsNumber()) {
+          GLuint srcOffsetV = TO_UINT32(srcOffset);
+          dataV += srcOffsetV * elementSize;
+        }
+        if (srcLengthOverride->IsNumber()) {
+          GLuint srcLengthOverrideV = TO_UINT32(srcLengthOverride);
+          size_t newDataLengthV = srcLengthOverrideV * elementSize;
+          if (newDataLengthV <= dataLengthV) {
+            dataLengthV = newDataLengthV;
+          } else {
+            return Nan::ThrowError("compressedTexSubImage3D: invalid srcLengthOverride");
+          }
+        }
+
+        glCompressedTexSubImage<d>(targetV, levelV, xoffsetV, yoffsetV, zoffsetV, widthV, heightV, depthV, formatV, dataLengthV, dataV);
+      } else {
+        return Nan::ThrowError("compressedTexSubImage3D: invalid arguments");
+      }
+    } else {
+      return Nan::ThrowError("compressedTexSubImage3D: invalid arguments");
+    }
+  }
+}
+
+// initialize
+
+std::pair<Local<Object>, Local<FunctionTemplate>> WebGLRenderingContext::Initialize(Isolate *isolate) {
+  #if defined(ANDROID) || defined(LUMIN)
+  if(!extensionFunctionsInitialized){
+    glFramebufferTextureMultiviewOVRExt = (PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVR)eglGetProcAddress("glFramebufferTextureMultiviewOVR");
+    if (!glFramebufferTextureMultiviewOVRExt) {
+        std::cerr << "Can not get proc address for glFramebufferTextureMultiviewOVR." << std::endl;
+    }
+    glFramebufferTextureMultisampleMultiviewOVRExt = (PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR)eglGetProcAddress("glFramebufferTextureMultisampleMultiviewOVR");
+    if (!glFramebufferTextureMultisampleMultiviewOVRExt) {
+        std::cerr << "Can not get proc address for glFramebufferTextureMultisampleMultiviewOVRExt." << std::endl;
+    }
+    extensionFunctionsInitialized = true;
+  }
+  #endif
+
+  // constructor
+  Local<FunctionTemplate> ctor = Nan::New<FunctionTemplate>(WebGLRenderingContext::New);
+
+  ctor->InstanceTemplate()->SetInternalFieldCount(1);
+  ctor->SetClassName(JS_STR("WebGLRenderingContext"));
+
+  // prototype
+  Local<ObjectTemplate> proto = ctor->PrototypeTemplate();
+
+  Nan::SetMethod(proto, "destroy", Destroy);
+  Nan::SetMethod(proto, "getWindowHandle", GetWindowHandle);
+  Nan::SetMethod(proto, "setWindowHandle", SetWindowHandle);
+  Nan::SetMethod(proto, "setDefaultVao", SetDefaultVao);
+  Nan::SetMethod(proto, "isDirty", IsDirty);
+  Nan::SetMethod(proto, "clearDirty", ClearDirty);
+
+  Nan::SetMethod(proto, "uniform1f", glCallWrap<Uniform1f>);
+  Nan::SetMethod(proto, "uniform2f", glCallWrap<Uniform2f>);
+  Nan::SetMethod(proto, "uniform3f", glCallWrap<Uniform3f>);
+  Nan::SetMethod(proto, "uniform4f", glCallWrap<Uniform4f>);
+  Nan::SetMethod(proto, "uniform1i", glCallWrap<Uniform1i>);
+  Nan::SetMethod(proto, "uniform2i", glCallWrap<Uniform2i>);
+  Nan::SetMethod(proto, "uniform3i", glCallWrap<Uniform3i>);
+  Nan::SetMethod(proto, "uniform4i", glCallWrap<Uniform4i>);
+  Nan::SetMethod(proto, "uniform1ui", glCallWrap<Uniform1ui>);
+  Nan::SetMethod(proto, "uniform2ui", glCallWrap<Uniform2ui>);
+  Nan::SetMethod(proto, "uniform3ui", glCallWrap<Uniform3ui>);
+  Nan::SetMethod(proto, "uniform4ui", glCallWrap<Uniform4ui>);
+  Nan::SetMethod(proto, "uniform1fv", glCallWrap<Uniform1fv>);
+  Nan::SetMethod(proto, "uniform2fv", glCallWrap<Uniform2fv>);
+  Nan::SetMethod(proto, "uniform3fv", glCallWrap<Uniform3fv>);
+  Nan::SetMethod(proto, "uniform4fv", glCallWrap<Uniform4fv>);
+  Nan::SetMethod(proto, "uniform1iv", glCallWrap<Uniform1iv>);
+  Nan::SetMethod(proto, "uniform2iv", glCallWrap<Uniform2iv>);
+  Nan::SetMethod(proto, "uniform3iv", glCallWrap<Uniform3iv>);
+  Nan::SetMethod(proto, "uniform4iv", glCallWrap<Uniform4iv>);
+
+  Nan::SetMethod(proto, "uniform1uiv", glCallWrap<Uniform1uiv>);
+  Nan::SetMethod(proto, "uniform2uiv", glCallWrap<Uniform2uiv>);
+  Nan::SetMethod(proto, "uniform3uiv", glCallWrap<Uniform3uiv>);
+  Nan::SetMethod(proto, "uniform4uiv", glCallWrap<Uniform4uiv>);
+  Nan::SetMethod(proto, "uniformMatrix2fv", glCallWrap<UniformMatrix2fv>);
+  Nan::SetMethod(proto, "uniformMatrix3fv", glCallWrap<UniformMatrix3fv>);
+  Nan::SetMethod(proto, "uniformMatrix4fv", glCallWrap<UniformMatrix4fv>);
+  Nan::SetMethod(proto, "uniformMatrix3x2fv", glCallWrap<UniformMatrix3x2fv>);
+  Nan::SetMethod(proto, "uniformMatrix4x2fv", glCallWrap<UniformMatrix4x2fv>);
+  Nan::SetMethod(proto, "uniformMatrix2x3fv", glCallWrap<UniformMatrix2x3fv>);
+  Nan::SetMethod(proto, "uniformMatrix4x3fv", glCallWrap<UniformMatrix4x3fv>);
+  Nan::SetMethod(proto, "uniformMatrix2x4fv", glCallWrap<UniformMatrix2x4fv>);
+  Nan::SetMethod(proto, "uniformMatrix3x4fv", glCallWrap<UniformMatrix3x4fv>);
+
+  Nan::SetMethod(proto, "pixelStorei", glCallWrap<PixelStorei>);
+  Nan::SetMethod(proto, "bindAttribLocation", glCallWrap<BindAttribLocation>);
+  Nan::SetMethod(proto, "getError", glCallWrap<GetError>);
+  Nan::SetMethod(proto, "drawArrays", glCallWrap<DrawArrays>);
+  Nan::SetMethod(proto, "drawArraysInstanced", glCallWrap<DrawArraysInstanced>);
+  Nan::SetMethod(proto, "drawArraysInstancedANGLE", glCallWrap<DrawArraysInstancedANGLE>);
+
+  Nan::SetMethod(proto, "generateMipmap", glCallWrap<GenerateMipmap>);
+
+  Nan::SetMethod(proto, "getAttribLocation", glCallWrap<GetAttribLocation>);
+  Nan::SetMethod(proto, "depthFunc", glCallWrap<DepthFunc>);
+  Nan::SetMethod(proto, "viewport", glCallWrap<Viewport>);
+  Nan::SetMethod(proto, "createShader", glCallWrap<CreateShader>);
+  Nan::SetMethod(proto, "shaderSource", glCallWrap<ShaderSource>);
+  Nan::SetMethod(proto, "compileShader", glCallWrap<CompileShader>);
+  Nan::SetMethod(proto, "getShaderParameter", glCallWrap<GetShaderParameter>);
+  Nan::SetMethod(proto, "getShaderInfoLog", glCallWrap<GetShaderInfoLog>);
+  Nan::SetMethod(proto, "createProgram", glCallWrap<CreateProgram>);
+  Nan::SetMethod(proto, "attachShader", glCallWrap<AttachShader>);
+  Nan::SetMethod(proto, "linkProgram", glCallWrap<LinkProgram>);
+  Nan::SetMethod(proto, "getProgramParameter", glCallWrap<GetProgramParameter>);
+  Nan::SetMethod(proto, "getUniformLocation", glCallWrap<GetUniformLocation>);
+  Nan::SetMethod(proto, "getUniformIndices", glCallWrap<GetUniformIndices>);
+  Nan::SetMethod(proto, "getActiveUniforms", glCallWrap<GetActiveUniforms>);
+  Nan::SetMethod(proto, "getUniformBlockIndex", glCallWrap<GetUniformBlockIndex>);
+  Nan::SetMethod(proto, "uniformBlockBinding", glCallWrap<UniformBlockBinding>);
+  Nan::SetMethod(proto, "getActiveUniformBlockName", glCallWrap<GetActiveUniformBlockName>);
+  Nan::SetMethod(proto, "getActiveUniformBlockParameter", glCallWrap<GetActiveUniformBlockParameter>);
+  Nan::SetMethod(proto, "getUniform", glCallWrap<GetUniform>);
+  Nan::SetMethod(proto, "getIndexedParameter", glCallWrap<GetIndexedParameter>);
+  Nan::SetMethod(proto, "getFragDataLocation", glCallWrap<GetFragDataLocation>);
+  Nan::SetMethod(proto, "clearColor", glCallWrap<ClearColor>);
+  Nan::SetMethod(proto, "clearDepth", glCallWrap<ClearDepth>);
+
+  Nan::SetMethod(proto, "disable", glCallWrap<Disable>);
+  Nan::SetMethod(proto, "createTexture", glCallWrap<CreateTexture>);
+  Nan::SetMethod(proto, "bindTexture", glCallWrap<BindTexture>);
+  // Nan::SetMethod(proto, "flipTextureData", glCallWrap<FlipTextureData>);
+  Nan::SetMethod(proto, "texImage2D", glCallWrap<TexImage<2>>);
+  Nan::SetMethod(proto, "texImage3D", glCallWrap<TexImage<3>>);
+  Nan::SetMethod(proto, "compressedTexImage2D", glCallWrap<CompressedTexImage<2>>);
+  Nan::SetMethod(proto, "compressedTexImage3D", glCallWrap<CompressedTexImage<3>>);
+  Nan::SetMethod(proto, "compressedTexSubImage2D", glCallWrap<CompressedTexSubImage<2>>);
+  Nan::SetMethod(proto, "compressedTexSubImage3D", glCallWrap<CompressedTexSubImage<3>>);
+  Nan::SetMethod(proto, "texParameteri", glCallWrap<TexParameteri>);
+  Nan::SetMethod(proto, "texParameterf", glCallWrap<TexParameterf>);
+  Nan::SetMethod(proto, "clear", glCallWrap<Clear>);
+  Nan::SetMethod(proto, "useProgram", glCallWrap<UseProgram>);
+  Nan::SetMethod(proto, "createFramebuffer", glCallWrap<CreateFramebuffer>);
+  Nan::SetMethod(proto, "bindFramebuffer", glCallWrap<BindFramebuffer>);
+  Nan::SetMethod(proto, "bindFramebufferRaw", glCallWrap<BindFramebufferRaw>);
+  Nan::SetMethod(proto, "framebufferTexture2D", glCallWrap<FramebufferTexture2D>);
+  Nan::SetMethod(proto, "framebufferTextureLayer", glCallWrap<FramebufferTextureLayer>);
+  Nan::SetMethod(proto, "blitFramebuffer", glCallWrap<BlitFramebuffer>);
+  Nan::SetMethod(proto, "invalidateFramebuffer", glCallWrap<InvalidateFramebuffer>);
+  Nan::SetMethod(proto, "invalidateSubFramebuffer", glCallWrap<InvalidateSubFramebuffer>);
+  Nan::SetMethod(proto, "createBuffer", glCallWrap<CreateBuffer>);
+  Nan::SetMethod(proto, "bindBuffer", glCallWrap<BindBuffer>);
+  Nan::SetMethod(proto, "bindBufferBase", glCallWrap<BindBufferBase>);
+  Nan::SetMethod(proto, "bindBufferRange", glCallWrap<BindBufferRange>);
+  Nan::SetMethod(proto, "bufferData", glCallWrap<BufferData>);
+  Nan::SetMethod(proto, "bufferSubData", glCallWrap<BufferSubData>);
+  Nan::SetMethod(proto, "copyBufferSubData", glCallWrap<CopyBufferSubData>);
+  Nan::SetMethod(proto, "getBufferSubData", glCallWrap<GetBufferSubData>);
+  Nan::SetMethod(proto, "readBuffer", glCallWrap<ReadBuffer>);
+  Nan::SetMethod(proto, "enable", glCallWrap<Enable>);
+  Nan::SetMethod(proto, "blendEquation", glCallWrap<BlendEquation>);
+  Nan::SetMethod(proto, "blendFunc", glCallWrap<BlendFunc>);
+  Nan::SetMethod(proto, "enableVertexAttribArray", glCallWrap<EnableVertexAttribArray>);
+  Nan::SetMethod(proto, "vertexAttribPointer", glCallWrap<VertexAttribPointer>);
+  Nan::SetMethod(proto, "vertexAttribIPointer", glCallWrap<VertexAttribIPointer>);
+  Nan::SetMethod(proto, "activeTexture", glCallWrap<ActiveTexture>);
+  Nan::SetMethod(proto, "drawElements", glCallWrap<DrawElements>);
+  Nan::SetMethod(proto, "drawElementsInstanced", glCallWrap<DrawElementsInstanced>);
+  Nan::SetMethod(proto, "drawElementsInstancedANGLE", glCallWrap<DrawElementsInstancedANGLE>);
+  Nan::SetMethod(proto, "drawRangeElements", glCallWrap<DrawRangeElements>);
+  Nan::SetMethod(proto, "flush", glCallWrap<Flush>);
+  Nan::SetMethod(proto, "finish", glCallWrap<Finish>);
+
+  Nan::SetMethod(proto, "vertexAttrib1f", glCallWrap<VertexAttrib1f>);
+  Nan::SetMethod(proto, "vertexAttrib2f", glCallWrap<VertexAttrib2f>);
+  Nan::SetMethod(proto, "vertexAttrib3f", glCallWrap<VertexAttrib3f>);
+  Nan::SetMethod(proto, "vertexAttrib4f", glCallWrap<VertexAttrib4f>);
+  Nan::SetMethod(proto, "vertexAttrib1fv", glCallWrap<VertexAttrib1fv>);
+  Nan::SetMethod(proto, "vertexAttrib2fv", glCallWrap<VertexAttrib2fv>);
+  Nan::SetMethod(proto, "vertexAttrib3fv", glCallWrap<VertexAttrib3fv>);
+  Nan::SetMethod(proto, "vertexAttrib4fv", glCallWrap<VertexAttrib4fv>);
+
+  Nan::SetMethod(proto, "vertexAttribI4i", glCallWrap<VertexAttribI4i>);
+  Nan::SetMethod(proto, "vertexAttribI4iv", glCallWrap<VertexAttribI4iv>);
+  Nan::SetMethod(proto, "vertexAttribI4ui", glCallWrap<VertexAttribI4ui>);
+  Nan::SetMethod(proto, "vertexAttribI4uiv", glCallWrap<VertexAttribI4uiv>);
+
+  Nan::SetMethod(proto, "vertexAttribDivisor", glCallWrap<VertexAttribDivisor>);
+  Nan::SetMethod(proto, "vertexAttribDivisorANGLE", glCallWrap<VertexAttribDivisorANGLE>);
+  Nan::SetMethod(proto, "drawBuffers", glCallWrap<DrawBuffers>);
+  Nan::SetMethod(proto, "drawBuffersWEBGL", glCallWrap<DrawBuffersWEBGL>);
+  Nan::SetMethod(proto, "clearBufferfv", glCallWrap<ClearBufferfv>);
+  Nan::SetMethod(proto, "clearBufferiv", glCallWrap<ClearBufferiv>);
+  Nan::SetMethod(proto, "clearBufferuiv", glCallWrap<ClearBufferuiv>);
+  Nan::SetMethod(proto, "clearBufferfi", glCallWrap<ClearBufferfi>);
+
+  Nan::SetMethod(proto, "blendColor", glCallWrap<BlendColor>);
+  Nan::SetMethod(proto, "blendEquationSeparate", glCallWrap<BlendEquationSeparate>);
+  Nan::SetMethod(proto, "blendFuncSeparate", glCallWrap<BlendFuncSeparate>);
+  Nan::SetMethod(proto, "clearStencil", glCallWrap<ClearStencil>);
+  Nan::SetMethod(proto, "colorMask", glCallWrap<ColorMask>);
+  Nan::SetMethod(proto, "copyTexImage2D", glCallWrap<CopyTexImage2D>);
+  Nan::SetMethod(proto, "copyTexSubImage2D", glCallWrap<CopyTexSubImage2D>);
+  Nan::SetMethod(proto, "cullFace", glCallWrap<CullFace>);
+  Nan::SetMethod(proto, "depthMask", glCallWrap<DepthMask>);
+  Nan::SetMethod(proto, "depthRange", glCallWrap<DepthRange>);
+  Nan::SetMethod(proto, "disableVertexAttribArray", glCallWrap<DisableVertexAttribArray>);
+  Nan::SetMethod(proto, "hint", glCallWrap<Hint>);
+  Nan::SetMethod(proto, "isEnabled", glCallWrap<IsEnabled>);
+  Nan::SetMethod(proto, "lineWidth", glCallWrap<LineWidth>);
+  Nan::SetMethod(proto, "polygonOffset", glCallWrap<PolygonOffset>);
+
+  Nan::SetMethod(proto, "scissor", glCallWrap<Scissor>);
+  Nan::SetMethod(proto, "stencilFunc", glCallWrap<StencilFunc>);
+  Nan::SetMethod(proto, "stencilFuncSeparate", glCallWrap<StencilFuncSeparate>);
+  Nan::SetMethod(proto, "stencilMask", glCallWrap<StencilMask>);
+  Nan::SetMethod(proto, "stencilMaskSeparate", glCallWrap<StencilMaskSeparate>);
+  Nan::SetMethod(proto, "stencilOp", glCallWrap<StencilOp>);
+  Nan::SetMethod(proto, "stencilOpSeparate", glCallWrap<StencilOpSeparate>);
+  Nan::SetMethod(proto, "bindRenderbuffer", glCallWrap<BindRenderbuffer>);
+  Nan::SetMethod(proto, "createRenderbuffer", glCallWrap<CreateRenderbuffer>);
+
+  Nan::SetMethod(proto, "deleteBuffer", glCallWrap<DeleteBuffer>);
+  Nan::SetMethod(proto, "deleteFramebuffer", glCallWrap<DeleteFramebuffer>);
+  Nan::SetMethod(proto, "deleteProgram", glCallWrap<DeleteProgram>);
+  Nan::SetMethod(proto, "deleteRenderbuffer", glCallWrap<DeleteRenderbuffer>);
+  Nan::SetMethod(proto, "deleteShader", glCallWrap<DeleteShader>);
+  Nan::SetMethod(proto, "deleteTexture", glCallWrap<DeleteTexture>);
+  Nan::SetMethod(proto, "detachShader", glCallWrap<DetachShader>);
+  Nan::SetMethod(proto, "framebufferRenderbuffer", glCallWrap<FramebufferRenderbuffer>);
+  Nan::SetMethod(proto, "getVertexAttribOffset", glCallWrap<GetVertexAttribOffset>);
+  Nan::SetMethod(proto, "getShaderPrecisionFormat", glCallWrap<GetShaderPrecisionFormat>);
+
+  Nan::SetMethod(proto, "isBuffer", glCallWrap<IsBuffer>);
+  Nan::SetMethod(proto, "isFramebuffer", glCallWrap<IsFramebuffer>);
+  Nan::SetMethod(proto, "isProgram", glCallWrap<IsProgram>);
+  Nan::SetMethod(proto, "isRenderbuffer", glCallWrap<IsRenderbuffer>);
+  Nan::SetMethod(proto, "isShader", glCallWrap<IsShader>);
+  Nan::SetMethod(proto, "isTexture", glCallWrap<IsTexture>);
+  Nan::SetMethod(proto, "isVertexArray", glCallWrap<IsVertexArray>);
+  Nan::SetMethod(proto, "isSync", glCallWrap<IsSync>);
+
+  Nan::SetMethod(proto, "renderbufferStorage", glCallWrap<RenderbufferStorage>);
+  Nan::SetMethod(proto, "renderbufferStorageMultisample", glCallWrap<RenderbufferStorageMultisample>);
+  Nan::SetMethod(proto, "getShaderSource", glCallWrap<GetShaderSource>);
+  Nan::SetMethod(proto, "validateProgram", glCallWrap<ValidateProgram>);
+
+  Nan::SetMethod(proto, "texSubImage2D", glCallWrap<TexSubImage<2>>);
+  Nan::SetMethod(proto, "texSubImage3D", glCallWrap<TexSubImage<3>>);
+  Nan::SetMethod(proto, "texStorage2D", glCallWrap<TexStorage2D>);
+  Nan::SetMethod(proto, "texStorage3D", glCallWrap<TexStorage3D>);
+
+  Nan::SetMethod(proto, "readPixels", glCallWrap<ReadPixels>);
+  Nan::SetMethod(proto, "getTexParameter", glCallWrap<GetTexParameter>);
+  Nan::SetMethod(proto, "getActiveAttrib", glCallWrap<GetActiveAttrib>);
+  Nan::SetMethod(proto, "getActiveUniform", glCallWrap<GetActiveUniform>);
+  Nan::SetMethod(proto, "getAttachedShaders", glCallWrap<GetAttachedShaders>);
+  Nan::SetMethod(proto, "getParameter", glCallWrap<GetParameter>);
+  Nan::SetMethod(proto, "getBufferParameter", glCallWrap<GetBufferParameter>);
+  Nan::SetMethod(proto, "getFramebufferAttachmentParameter", glCallWrap<GetFramebufferAttachmentParameter>);
+  Nan::SetMethod(proto, "getProgramInfoLog", glCallWrap<GetProgramInfoLog>);
+  Nan::SetMethod(proto, "getRenderbufferParameter", glCallWrap<GetRenderbufferParameter>);
+  Nan::SetMethod(proto, "getVertexAttrib", glCallWrap<GetVertexAttrib>);
+  Nan::SetMethod(proto, "getFragDataLocation", glCallWrap<GetFragDataLocation>);
+  Nan::SetMethod(proto, "getSupportedExtensions", glCallWrap<GetSupportedExtensions>);
+  Nan::SetMethod(proto, "getExtension", glCallWrap<GetExtension>);
+  // Nan::SetMethod(proto, "getContextAttributes", glCallWrap<GetContextAttributes>);
+
+  Nan::SetMethod(proto, "checkFramebufferStatus", glCallWrap<CheckFramebufferStatus>);
+
+  Nan::SetMethod(proto, "createVertexArray", glCallWrap<CreateVertexArray>);
+  Nan::SetMethod(proto, "deleteVertexArray", glCallWrap<DeleteVertexArray>);
+  Nan::SetMethod(proto, "bindVertexArray", glCallWrap<BindVertexArray>);
+
+  Nan::SetMethod(proto, "fenceSync", glCallWrap<FenceSync>);
+  Nan::SetMethod(proto, "deleteSync", glCallWrap<DeleteSync>);
+  Nan::SetMethod(proto, "clientWaitSync", glCallWrap<ClientWaitSync>);
+  Nan::SetMethod(proto, "waitSync", glCallWrap<WaitSync>);
+  Nan::SetMethod(proto, "getSyncParameter", glCallWrap<GetSyncParameter>);
+
+  Nan::SetMethod(proto, "frontFace", glCallWrap<FrontFace>);
+
+  Nan::SetMethod(proto, "isContextLost", glCallWrap<IsContextLost>);
+
+  Nan::SetAccessor(proto, JS_STR("drawingBufferWidth"), glGetterWrap<DrawingBufferWidthGetter>);
+  Nan::SetAccessor(proto, JS_STR("drawingBufferHeight"), glGetterWrap<DrawingBufferHeightGetter>);
+
+  // OVR_multiview2
+  Nan::SetMethod(proto, "framebufferTextureMultiviewOVR", glCallWrap<FramebufferTextureMultiviewOVR>);
+  Nan::SetMethod(proto, "framebufferTextureMultisampleMultiviewOVR", glCallWrap<FramebufferTextureMultisampleMultiviewOVR>);
+
+  setGlConstants(proto);
+  
+  // non-standard
+
+  Nan::SetMethod(proto, "getBoundFramebuffer", glCallWrap<GetBoundFramebuffer>);
+  Nan::SetMethod(proto, "getDefaultFramebuffer", GetDefaultFramebuffer);
+  Nan::SetMethod(proto, "setDefaultFramebuffer", glCallWrap<SetDefaultFramebuffer>);
+  Nan::SetMethod(proto, "setClearEnabled", SetClearEnabled);
+  Nan::SetMethod(proto, "loadSubTexture", LoadSubTexture);
+
+  // ctor
+  Local<Function> ctorFn = Nan::GetFunction(ctor).ToLocalChecked();
+  setGlConstants(ctorFn);
+
+  return std::pair<Local<Object>, Local<FunctionTemplate>>(ctorFn, ctor);
+}
+
+WebGLRenderingContext::WebGLRenderingContext() :
+  live(true),
+  windowHandle(nullptr),
+  defaultVao(0),
+  defaultFramebuffer(0),
+  clearEnabled(true),
+  dirty(false),
+  activeTexture(GL_TEXTURE0)
+  {}
+
+WebGLRenderingContext::~WebGLRenderingContext() {
+  for (auto iter = keys.begin(); iter != keys.end(); iter++) {
+    GlShader *glShader = (GlShader *)iter->second;
+    delete glShader;
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::New) {
+  WebGLRenderingContext *gl = new WebGLRenderingContext();
+  Local<Object> glObj = info.This();
+  gl->Wrap(glObj);
+
+  info.GetReturnValue().Set(glObj);
+}
+
+NAN_METHOD(WebGLRenderingContext::Destroy) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
+  gl->live = false;
+
+  for (auto iter = gl->objectCache.buffers.begin(); iter != gl->objectCache.buffers.end(); iter++) {
+    GLuint buffer = *iter;
+    glDeleteBuffers(1, &buffer);
+  }
+  for (auto iter = gl->objectCache.queries.begin(); iter != gl->objectCache.queries.end(); iter++) {
+    GLuint query = *iter;
+    glDeleteQueries(1, &query);
+  }
+  for (auto iter = gl->objectCache.renderbuffers.begin(); iter != gl->objectCache.renderbuffers.end(); iter++) {
+    GLuint renderbuffer = *iter;
+    glDeleteRenderbuffers(1, &renderbuffer);
+  }
+  for (auto iter = gl->objectCache.samplers.begin(); iter != gl->objectCache.samplers.end(); iter++) {
+    GLuint sampler = *iter;
+    glDeleteSamplers(1, &sampler);
+  }
+  for (auto iter = gl->objectCache.textures.begin(); iter != gl->objectCache.textures.end(); iter++) {
+    GLuint texture = *iter;
+    glDeleteTextures(1, &texture);
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::GetWindowHandle) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  if (gl->windowHandle) {
+    info.GetReturnValue().Set(pointerToArray(gl->windowHandle));
+  } else {
+    info.GetReturnValue().Set(Nan::Null());
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::SetWindowHandle) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  if (info[0]->IsArray()) {
+    gl->windowHandle = (NATIVEwindow *)arrayToPointer(Local<Array>::Cast(info[0]));
+  } else {
+    gl->windowHandle = nullptr;
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::SetDefaultVao) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  gl->defaultVao = TO_UINT32(info[0]);
+}
+
+NAN_METHOD(WebGLRenderingContext::IsDirty) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  info.GetReturnValue().Set(JS_BOOL(gl->dirty));
+}
+
+NAN_METHOD(WebGLRenderingContext::ClearDirty) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  gl->dirty = false;
+}
+
+// GL CALLS
 
 NAN_METHOD(WebGLRenderingContext::Uniform1f) {
   if (info[0]->IsObject()) {
@@ -1495,12 +2479,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1fv) {
       data = getArrayData<GLfloat>(info[1], &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1528,12 +2512,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform2fv) {
       count /= 2;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 2;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1561,12 +2546,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform3fv) {
       count /= 3;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 3;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1594,12 +2580,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform4fv) {
       count /= 4;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 4;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1625,12 +2612,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1iv) {
       data = getArrayData<GLint>(info[1], &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1658,12 +2645,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform2iv) {
       count /= 2;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 2;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1691,12 +2679,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform3iv) {
       count /= 3;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 3;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1724,12 +2713,13 @@ NAN_METHOD(WebGLRenderingContext::Uniform4iv) {
       count /= 4;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 4;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1756,12 +2746,12 @@ NAN_METHOD(WebGLRenderingContext::Uniform1uiv) {
       data = getArrayData<GLuint>(dataValue, &count);
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
       count -= srcOffset;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1784,16 +2774,19 @@ NAN_METHOD(WebGLRenderingContext::Uniform2uiv) {
         uint32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLuint>(uint32Array, &count);
+      count /= 2;
     } else {
       data = getArrayData<GLuint>(dataValue, &count);
+      count /= 2;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 2;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1816,17 +2809,19 @@ NAN_METHOD(WebGLRenderingContext::Uniform3uiv) {
         uint32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLuint>(uint32Array, &count);
+      count /= 3;
     } else {
       data = getArrayData<GLuint>(dataValue, &count);
+      count /= 3;
     }
     if (info[2]->IsNumber()) {
-
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 3;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1849,16 +2844,19 @@ NAN_METHOD(WebGLRenderingContext::Uniform4uiv) {
         uint32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLuint>(uint32Array, &count);
+      count /= 4;
     } else {
       data = getArrayData<GLuint>(dataValue, &count);
+      count /= 4;
     }
     if (info[2]->IsNumber()) {
-      GLsizei srcOffset = TO_UINT32(info[3]);
+      GLsizei srcOffset = TO_UINT32(info[2]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / 4;
     }
     if (info[3]->IsNumber()) {
-      GLsizei srcLength = TO_UINT32(info[4]);
+      GLsizei srcLength = TO_UINT32(info[3]);
+      srcLength /= 4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
@@ -1881,27 +2879,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 2*2;
     } else {
       data = getArrayData<GLfloat>(info[2], &count);
+      count /= 2*2;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (2*2);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 2*2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 4) {
-      Nan::ThrowError("Not enough data for UniformMatrix2fv");
-    } else {
-      count /= 4;
-      glUniformMatrix2fv(location, count, transpose, data);
-
-      // info.GetReturnValue().Set(Nan::Undefined());
-    }
+    glUniformMatrix2fv(location, count, transpose, data);
   }
 }
 
@@ -1920,25 +2914,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 3*3;
     } else {
       data = getArrayData<GLfloat>(info[2], &count);
+      count /= 3*3;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (3*3);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 3*3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 9) {
-      Nan::ThrowError("Not enough data for UniformMatrix3fv");
-    } else {
-      count /= 9;
-      glUniformMatrix3fv(location, count, transpose, data);
-    }
+    glUniformMatrix3fv(location, count, transpose, data);
   }
 }
 
@@ -1957,25 +2949,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 4*4;
     } else {
       data = getArrayData<GLfloat>(info[2], &count);
+      count /= 4*4;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (4*4);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 4*4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 16) {
-      Nan::ThrowError("Not enough data for UniformMatrix4fv");
-    } else {
-      count /= 16;
-      glUniformMatrix4fv(location, count, transpose, data);
-    }
+    glUniformMatrix4fv(location, count, transpose, data);
   }
 }
 
@@ -1995,25 +2985,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x2fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 3*2;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 3*2;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (3*2);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 3*2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 6) {
-      Nan::ThrowError("Not enough data for UniformMatrix3x2fv");
-    } else {
-      count /= 6;
-      glUniformMatrix3x2fv(location, count, transpose, data);
-    }
+    glUniformMatrix3x2fv(location, count, transpose, data);
   }
 }
 
@@ -2033,25 +3021,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x2fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 4*2;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 4*2;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (4*2);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 4*2;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 8) {
-      Nan::ThrowError("Not enough data for UniformMatrix4x2fv");
-    } else {
-      count /= 8;
-      glUniformMatrix4x2fv(location, count, transpose, data);
-    }
+    glUniformMatrix4x2fv(location, count, transpose, data);
   }
 }
 
@@ -2071,25 +3057,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x3fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 2*3;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 2*3;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (2*3);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 2*3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 6) {
-      Nan::ThrowError("Not enough data for UniformMatrix2x3fv");
-    } else {
-      count /= 6;
-      glUniformMatrix2x3fv(location, count, transpose, data);
-    }
+    glUniformMatrix2x3fv(location, count, transpose, data);
   }
 }
 
@@ -2109,25 +3093,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix4x3fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 4*3;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 4*3;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (4*3);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 4*3;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 12) {
-      Nan::ThrowError("Not enough data for UniformMatrix4x3fv");
-    } else {
-      count /= 12;
-      glUniformMatrix4x3fv(location, count, transpose, data);
-    }
+    glUniformMatrix4x3fv(location, count, transpose, data);
   }
 }
 
@@ -2147,25 +3129,23 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix2x4fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 2*4;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 2*4;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (2*4);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 2*4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 8) {
-      Nan::ThrowError("Not enough data for UniformMatrix2x4fv");
-    } else {
-      count /= 8;
-      glUniformMatrix2x4fv(location, count, transpose, data);
-    }
+    glUniformMatrix2x4fv(location, count, transpose, data);
   }
 }
 
@@ -2185,51 +3165,38 @@ NAN_METHOD(WebGLRenderingContext::UniformMatrix3x4fv) {
         float32Array->Set(i, array->Get(i));
       }
       data = getArrayData<GLfloat>(float32Array, &count);
+      count /= 3*4;
     } else {
       data = getArrayData<GLfloat>(dataValue, &count);
+      count /= 3*4;
     }
     if (info[3]->IsNumber()) {
       GLsizei srcOffset = TO_UINT32(info[3]);
       data += srcOffset;
-      count -= srcOffset;
+      count -= srcOffset / (3*4);
     }
     if (info[4]->IsNumber()) {
       GLsizei srcLength = TO_UINT32(info[4]);
+      srcLength /= 3*4;
       count = std::min<GLsizei>(srcLength, count);
     }
 
-    if (count < 12) {
-      Nan::ThrowError("Not enough data for UniformMatrix3x4fv");
-    } else {
-      count /= 12;
-      glUniformMatrix3x4fv(location, count, transpose, data);
-    }
+    glUniformMatrix3x4fv(location, count, transpose, data);
   }
 }
 
 NAN_METHOD(WebGLRenderingContext::PixelStorei) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
   int pname = TO_INT32(info[0]);
   int param = TO_INT32(info[1]);
 
-  if (pname == UNPACK_FLIP_Y_WEBGL) {
-    WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-    gl->flipY = (bool)param;
-  } else if (pname == UNPACK_PREMULTIPLY_ALPHA_WEBGL) {
-    WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-    gl->premultiplyAlpha = (bool)param;
-  } else if (pname == GL_PACK_ALIGNMENT) {
-    WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-    gl->packAlignment = param;
-    glPixelStorei(pname, param);
-  } else if (pname == GL_UNPACK_ALIGNMENT) {
-    WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-    gl->unpackAlignment = param;
-    glPixelStorei(pname, param);
+  if (pname == UNPACK_FLIP_Y_WEBGL || pname == UNPACK_PREMULTIPLY_ALPHA_WEBGL) {
+    // nothing; tracked internally
   } else {
     glPixelStorei(pname, param);
   }
-
-  // info.GetReturnValue().Set(Nan::Undefined());
+  
+  gl->SetPixelStoreiBinding(pname, param);
 }
 
 NAN_METHOD(WebGLRenderingContext::BindAttribLocation) {
@@ -2397,7 +3364,7 @@ NAN_GETTER(WebGLRenderingContext::DrawingBufferHeightGetter) {
   info.GetReturnValue().Set(JS_INT(height));
 }
 
-NAN_METHOD(WebGLRenderingContext::GetFramebuffer) {
+NAN_METHOD(WebGLRenderingContext::GetBoundFramebuffer) {
   Local<Object> glObj = info.This();
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(glObj);
 
@@ -2409,6 +3376,12 @@ NAN_METHOD(WebGLRenderingContext::GetFramebuffer) {
   } else {
     info.GetReturnValue().Set(Nan::Null());
   }
+}
+
+NAN_METHOD(WebGLRenderingContext::GetDefaultFramebuffer) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
+  info.GetReturnValue().Set(JS_INT(gl->defaultFramebuffer));
 }
 
 NAN_METHOD(WebGLRenderingContext::SetDefaultFramebuffer) {
@@ -2433,6 +3406,113 @@ NAN_METHOD(WebGLRenderingContext::SetDefaultFramebuffer) {
   }
 
   gl->defaultFramebuffer = framebuffer;
+}
+
+NAN_METHOD(WebGLRenderingContext::SetClearEnabled) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  bool clearEnabled = TO_BOOL(info[0]);
+
+  gl->clearEnabled = clearEnabled;
+}
+
+NAN_METHOD(WebGLRenderingContext::LoadSubTexture) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  GLuint tex = TO_UINT32(info[0]);
+  GLuint x = TO_UINT32(info[1]);
+  GLuint y = TO_UINT32(info[2]);
+  GLuint width = TO_UINT32(info[3]);
+  GLuint height = TO_UINT32(info[4]);
+  Local<Uint8Array> bufferUint8Array = Local<Uint8Array>::Cast(info[5]);
+  GLuint oldTextureWidth = TO_UINT32(info[6]);
+  GLuint oldTextureHeight = TO_UINT32(info[7]);
+  GLuint newTextureWidth = TO_UINT32(info[8]);
+  GLuint newTextureHeight = TO_UINT32(info[9]);
+
+  windowsystem::SetCurrentWindowContext(gl->windowHandle);
+
+  glBindTexture(GL_TEXTURE_2D, tex);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+  if (newTextureWidth != oldTextureWidth || newTextureHeight != oldTextureHeight) {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+#if !defined(LUMIN) && !defined(ANDROID)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, newTextureWidth, newTextureHeight, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+#else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, newTextureWidth, newTextureHeight, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, NULL);
+#endif
+  }
+
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, width);
+  glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+  glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+  /* glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
+  glPixelStorei(GL_UNPACK_SKIP_ROWS, y); */
+  uint8_t *buffer = (uint8_t *)bufferUint8Array->Buffer()->GetContents().Data() + bufferUint8Array->ByteOffset();
+#if !defined(LUMIN) && !defined(ANDROID)
+  glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, buffer);
+#else
+  glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, width, height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, buffer);
+#endif
+  
+  // glFlush();
+  
+  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D)) {
+    glBindTexture(GL_TEXTURE_2D, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D));
+  } else {
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+  if (gl->HasPixelStoreiBinding(GL_UNPACK_ROW_LENGTH)) {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, gl->GetPixelStoreiBinding(GL_UNPACK_ROW_LENGTH));
+  } else {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  }
+  if (gl->HasPixelStoreiBinding(GL_UNPACK_SKIP_PIXELS)) {
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, gl->GetPixelStoreiBinding(GL_UNPACK_SKIP_PIXELS));
+  } else {
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+  }
+  if (gl->HasPixelStoreiBinding(GL_UNPACK_SKIP_ROWS)) {
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, gl->GetPixelStoreiBinding(GL_UNPACK_SKIP_ROWS));
+  } else {
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::FramebufferTextureMultiviewOVR) {
+  GLenum target = TO_UINT32(info[0]);
+  GLenum attachment = TO_UINT32(info[1]);
+  GLuint texture = info[2]->IsObject() ? TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id"))) : 0;
+  GLint level = TO_INT32(info[3]);
+  GLint baseViewIndex = TO_INT32(info[4]);
+  GLsizei numViews = TO_UINT32(info[5]);
+
+#if !defined(ANDROID) && !defined(LUMIN)
+  glFramebufferTextureMultiviewOVR(target, attachment, texture, level, baseViewIndex, numViews);
+#endif
+#if defined(ANDROID) || defined(LUMIN)
+  glFramebufferTextureMultiviewOVRExt(target, attachment, texture, level, baseViewIndex, numViews);
+#endif
+
+}
+
+NAN_METHOD(WebGLRenderingContext::FramebufferTextureMultisampleMultiviewOVR) {
+  GLenum target = TO_UINT32(info[0]);
+  GLenum attachment = TO_UINT32(info[1]);
+  GLuint texture = info[2]->IsObject() ? TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id"))) : 0;
+  GLint level = TO_INT32(info[3]);
+  GLsizei samples = TO_UINT32(info[4]);
+  GLint baseViewIndex = TO_INT32(info[5]);
+  GLsizei numViews = TO_UINT32(info[6]);
+
+#if !defined(ANDROID) && !defined(LUMIN)
+  glFramebufferTextureMultisampleMultiviewOVR(target, attachment, texture, level, samples, baseViewIndex, numViews);
+#endif
+#if defined(ANDROID) || defined(LUMIN)
+  glFramebufferTextureMultisampleMultiviewOVRExt(target, attachment, texture, level, samples, baseViewIndex, numViews);
+#endif
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderParameter) {
@@ -2480,7 +3560,6 @@ NAN_METHOD(WebGLRenderingContext::CreateProgram) {
   info.GetReturnValue().Set(programObject);
 }
 
-
 NAN_METHOD(WebGLRenderingContext::AttachShader) {
   GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   GLint shaderId = TO_INT32(JS_OBJ(info[1])->Get(JS_STR("id")));
@@ -2488,12 +3567,10 @@ NAN_METHOD(WebGLRenderingContext::AttachShader) {
   glAttachShader(programId, shaderId);
 }
 
-
 NAN_METHOD(WebGLRenderingContext::LinkProgram) {
   GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
   glLinkProgram(programId);
 }
-
 
 NAN_METHOD(WebGLRenderingContext::GetProgramParameter) {
   GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
@@ -2503,21 +3580,27 @@ NAN_METHOD(WebGLRenderingContext::GetProgramParameter) {
   switch (pname) {
     case GL_DELETE_STATUS:
     case GL_LINK_STATUS:
-    case GL_VALIDATE_STATUS:
+    case GL_VALIDATE_STATUS: {
       glGetProgramiv(programId, pname, &value);
       info.GetReturnValue().Set(JS_BOOL(static_cast<bool>(value)));
       break;
+    }
     case GL_ATTACHED_SHADERS:
     case GL_ACTIVE_ATTRIBUTES:
     case GL_ACTIVE_UNIFORMS:
+    case GL_TRANSFORM_FEEDBACK_BUFFER_MODE:
+    case GL_TRANSFORM_FEEDBACK_VARYINGS:
+    case GL_ACTIVE_UNIFORM_BLOCKS: {
       glGetProgramiv(programId, pname, &value);
-      info.GetReturnValue().Set(JS_FLOAT(static_cast<long>(value)));
+      info.GetReturnValue().Set(JS_INT(value));
       break;
-    default:
-      Nan::ThrowTypeError("GetProgramParameter: Invalid Enum");
+    }
+    default: {
+      Nan::ThrowTypeError("getProgramParameter: Invalid Enum");
+      break;
+    }
   }
 }
-
 
 NAN_METHOD(WebGLRenderingContext::GetUniformLocation) {
   GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
@@ -2531,6 +3614,78 @@ NAN_METHOD(WebGLRenderingContext::GetUniformLocation) {
     info.GetReturnValue().Set(locationObject);
   } else {
     info.GetReturnValue().Set(Nan::Null());
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::GetUniformIndices) {
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Local<Array> uniformNames = Local<Array>::Cast(info[1]);
+
+  std::vector<std::string> uniformNamesV(uniformNames->Length());
+  std::vector<GLchar *> uniformNamesV2(uniformNames->Length());
+  for (int i = 0; i < uniformNames->Length(); i++) {
+    Local<Value> uniformName = uniformNames->Get(i);
+    if (uniformName->IsString()) {
+      Nan::Utf8String uniformNameUtf8String(Local<String>::Cast(uniformName));
+      uniformNamesV[i] = std::string(*uniformNameUtf8String, uniformNameUtf8String.length());
+      uniformNamesV2[i] = (GLchar *)uniformNamesV[i].data();
+    } else {
+      return Nan::ThrowTypeError("getUniformIndices: invalid arguments");
+    }
+  }
+  std::vector<GLuint> uniformIndices(uniformNamesV2.size());
+
+  glGetUniformIndices(programId, uniformNamesV.size(), uniformNamesV2.data(), uniformIndices.data());
+
+  Local<Array> result = Nan::New<Array>(uniformIndices.size());
+  for (size_t i = 0; i < uniformIndices.size(); i++) {
+    result->Set(i, JS_INT(uniformIndices[i]));
+  }
+  return info.GetReturnValue().Set(result);
+}
+
+NAN_METHOD(WebGLRenderingContext::GetActiveUniforms) {
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Local<Array> uniformIndices;
+  if (info[1]->IsArray()) {
+    uniformIndices = Local<Array>::Cast(info[1]);
+  } else if (info[1]->IsNumber()) {
+    uniformIndices = Nan::New<Array>(1);
+    uniformIndices->Set(0, info[1]);
+  }
+  GLenum pname = TO_UINT32(info[2]);
+
+  std::vector<GLuint> uniformIndicesV(uniformIndices->Length());
+  for (int i = 0; i < uniformIndices->Length(); i++) {
+    uniformIndicesV[i] = TO_UINT32(uniformIndices->Get(i));
+  }
+  std::vector<GLint> params(uniformIndicesV.size());
+
+  switch (pname) {
+    case GL_UNIFORM_TYPE:
+    case GL_UNIFORM_SIZE:
+    case GL_UNIFORM_BLOCK_INDEX:
+    case GL_UNIFORM_OFFSET:
+    case GL_UNIFORM_ARRAY_STRIDE:
+    case GL_UNIFORM_MATRIX_STRIDE: {
+      glGetActiveUniformsiv(programId, uniformIndicesV.size(), uniformIndicesV.data(), pname, params.data());
+      Local<Array> result = Nan::New<Array>(params.size());
+      for (size_t i = 0; i < params.size(); i++) {
+        result->Set(i, JS_INT(params[i]));
+      }
+      return info.GetReturnValue().Set(result);
+    }
+    case GL_UNIFORM_IS_ROW_MAJOR: {
+      glGetActiveUniformsiv(programId, uniformIndicesV.size(), uniformIndicesV.data(), pname, params.data());
+      Local<Array> result = Nan::New<Array>(params.size());
+      for (size_t i = 0; i < params.size(); i++) {
+        result->Set(i, JS_INT(params[i]));
+      }
+      return info.GetReturnValue().Set(result);
+    }
+    default: {
+      return info.GetReturnValue().Set(Nan::Null());
+    }
   }
 }
 
@@ -2549,6 +3704,57 @@ NAN_METHOD(WebGLRenderingContext::UniformBlockBinding) {
   GLuint uniformBlockBinding = TO_UINT32(info[2]);
 
   glUniformBlockBinding(programId, uniformBlockIndex, uniformBlockBinding);
+}
+
+NAN_METHOD(WebGLRenderingContext::GetActiveUniformBlockName) {
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint uniformBlockIndex = TO_UINT32(info[1]);
+
+  const GLsizei bufSize = 4096;
+  GLsizei length = 0;
+  std::vector<GLchar> uniformBlockName(bufSize);
+
+  glGetActiveUniformBlockName(programId, uniformBlockIndex, bufSize, &length, uniformBlockName.data());
+
+  Local<String> result = Nan::New<String>(uniformBlockName.data(), length).ToLocalChecked();
+  info.GetReturnValue().Set(result);
+}
+
+NAN_METHOD(WebGLRenderingContext::GetActiveUniformBlockParameter) {
+  GLint programId = TO_INT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  GLuint uniformBlockIndex = TO_UINT32(info[1]);
+  GLenum pname = TO_UINT32(info[2]);
+
+  switch (pname) {
+    case GL_UNIFORM_BLOCK_BINDING:
+    case GL_UNIFORM_BLOCK_DATA_SIZE:
+    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS: {
+      GLint param;
+      glGetActiveUniformBlockiv(programId, uniformBlockIndex, pname, &param);
+      return info.GetReturnValue().Set(JS_INT(param));
+    }
+    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES: {
+      GLint numUniforms = 0;
+      glGetActiveUniformBlockiv(programId, uniformBlockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &numUniforms);
+
+      Local<ArrayBuffer> activeUniformIndicesArrayBuffer = ArrayBuffer::New(Isolate::GetCurrent(), numUniforms * sizeof(GLuint));
+      Local<Uint32Array> activeUniformIndicesUint32Array = Uint32Array::New(activeUniformIndicesArrayBuffer, 0, numUniforms);
+      if (numUniforms > 0) {
+        glGetActiveUniformBlockiv(programId, uniformBlockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES, (GLint *)activeUniformIndicesArrayBuffer->GetContents().Data());
+      }
+
+      return info.GetReturnValue().Set(activeUniformIndicesUint32Array);
+    }
+    case GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER:
+    case GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER: {
+      GLint param;
+      glGetActiveUniformBlockiv(programId, uniformBlockIndex, pname, &param);
+      return info.GetReturnValue().Set(JS_BOOL(static_cast<bool>(param)));
+    }
+    default: {
+      return info.GetReturnValue().Set(Nan::Null());
+    }
+  }
 }
 
 NAN_METHOD(WebGLRenderingContext::ClearColor) {
@@ -2571,23 +3777,27 @@ NAN_METHOD(WebGLRenderingContext::ClearDepth) {
 }
 
 NAN_METHOD(WebGLRenderingContext::Disable) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
   GLint arg = TO_INT32(info[0]);
-  glDisable(arg);
 
-  // info.GetReturnValue().Set(Nan::Undefined());
+  glDisable(arg);
 }
 
 NAN_METHOD(WebGLRenderingContext::Enable) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
   GLint arg = TO_INT32(info[0]);
-  glEnable(arg);
 
-  // info.GetReturnValue().Set(Nan::Undefined());
+  glEnable(arg);
 }
 
 
 NAN_METHOD(WebGLRenderingContext::CreateTexture) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint texture;
   glGenTextures(1, &texture);
+
+  gl->objectCache.samplers.insert(texture);
 
   Local<Object> textureObject = Nan::New<Object>();
   textureObject->Set(JS_STR("id"), JS_INT(texture));
@@ -2615,8 +3825,8 @@ NAN_METHOD(WebGLRenderingContext::FlipTextureData) {
 
   int num;
   char *pixels=(char*)getArrayData<BYTE>(info[0], &num);
-  int width = info[1]->Int32Value();
-  int height = info[2]->Int32Value();
+  int width = TO_INT32(info[1]);
+  int height = TO_INT32(info[2]);
 
   int elementSize = num / width / height;
   for (int y = 0; y < height; y++) {
@@ -2624,460 +3834,6 @@ NAN_METHOD(WebGLRenderingContext::FlipTextureData) {
   }
   memcpy(pixels, texPixels, num);
 } */
-
-inline bool hasWidthHeight(Local<Value> &value) {
-  MaybeLocal<Object> valueObject(Nan::To<Object>(value));
-  if (!valueObject.IsEmpty()) {
-    Local<String> widthString = Nan::New<String>("width", sizeof("width") - 1).ToLocalChecked();
-    Local<String> heightString = Nan::New<String>("height", sizeof("height") - 1).ToLocalChecked();
-
-    MaybeLocal<Number> widthValue(Nan::To<Number>(valueObject.ToLocalChecked()->Get(widthString)));
-    MaybeLocal<Number> heightValue(Nan::To<Number>(valueObject.ToLocalChecked()->Get(heightString)));
-    return !widthValue.IsEmpty() && !heightValue.IsEmpty();
-  } else {
-    return false;
-  }
-}
-
-size_t getFormatSize(int format) {
-  switch (format) {
-    case GL_RED:
-    case GL_RED_INTEGER:
-    case GL_DEPTH_COMPONENT:
-    case GL_LUMINANCE:
-    case GL_ALPHA:
-      return 1;
-    case GL_RG:
-    case GL_RG_INTEGER:
-    case GL_DEPTH_STENCIL:
-    case GL_LUMINANCE_ALPHA:
-      return 2;
-    case GL_RGB:
-    case GL_RGB_INTEGER:
-      return 3;
-    case GL_RGBA:
-    case GL_RGBA_INTEGER:
-      return 4;
-    default:
-      return 4;
-  }
-}
-
-size_t getTypeSize(int type) {
-  switch (type) {
-    case GL_UNSIGNED_BYTE:
-    case GL_BYTE:
-      return 1;
-    case GL_UNSIGNED_SHORT:
-    case GL_SHORT:
-    case GL_HALF_FLOAT:
-    case GL_UNSIGNED_SHORT_5_6_5:
-    case GL_UNSIGNED_SHORT_4_4_4_4:
-    case GL_UNSIGNED_SHORT_5_5_5_1:
-      return 2;
-    case GL_UNSIGNED_INT:
-    case GL_INT:
-    case GL_FLOAT:
-    case GL_UNSIGNED_INT_2_10_10_10_REV:
-    case GL_UNSIGNED_INT_10F_11F_11F_REV:
-    case GL_UNSIGNED_INT_5_9_9_9_REV:
-    case GL_UNSIGNED_INT_24_8:
-    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
-      return 4;
-    default:
-      return 4;
-  }
-}
-
-int formatMap[] = {
-  GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE,
-  GL_RGBA8_SNORM, GL_RGBA, GL_BYTE,
-  GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4,
-  GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV,
-  GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1,
-  GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT,
-  GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT_OES,
-  GL_RGBA32F, GL_RGBA, GL_FLOAT,
-  GL_RGBA8UI, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,
-  GL_RGBA8I, GL_RGBA_INTEGER, GL_BYTE,
-  GL_RGBA16UI, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT,
-  GL_RGBA16I, GL_RGBA_INTEGER, GL_SHORT,
-  GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT,
-  GL_RGBA32I, GL_RGBA_INTEGER, GL_INT,
-  GL_RGB10_A2UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,
-  GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE,
-  GL_RGB8_SNORM, GL_RGB, GL_BYTE,
-  GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-  GL_R11F_G11F_B10F, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV,
-  GL_RGB9_E5, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV,
-  GL_RGB16F, GL_RGB, GL_HALF_FLOAT,
-  GL_RGB16F, GL_RGB, GL_HALF_FLOAT_OES,
-  GL_RGB32F, GL_RGB, GL_FLOAT,
-  GL_RGB8UI, GL_RGB_INTEGER, GL_UNSIGNED_BYTE,
-  GL_RGB8I, GL_RGB_INTEGER, GL_BYTE,
-  GL_RGB16UI, GL_RGB_INTEGER, GL_UNSIGNED_SHORT,
-  GL_RGB16I, GL_RGB_INTEGER, GL_SHORT,
-  GL_RGB32UI, GL_RGB_INTEGER, GL_UNSIGNED_INT,
-  GL_RGB32I, GL_RGB_INTEGER, GL_INT,
-  GL_RG8, GL_RG, GL_UNSIGNED_BYTE,
-  GL_RG8_SNORM, GL_RG, GL_BYTE,
-  GL_RG16F, GL_RG, GL_HALF_FLOAT,
-  GL_RG16F, GL_RG, GL_HALF_FLOAT_OES,
-  GL_RG32F, GL_RG, GL_FLOAT,
-  GL_RG8UI, GL_RG_INTEGER, GL_UNSIGNED_BYTE,
-  GL_RG8I, GL_RG_INTEGER, GL_BYTE,
-  GL_RG16UI, GL_RG_INTEGER, GL_UNSIGNED_SHORT,
-  GL_RG16I, GL_RG_INTEGER, GL_SHORT,
-  GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT,
-  GL_RG32I, GL_RG_INTEGER, GL_INT,
-  GL_R8, GL_RED, GL_UNSIGNED_BYTE,
-  GL_R8_SNORM, GL_RED, GL_BYTE,
-  GL_R16F, GL_RED, GL_HALF_FLOAT,
-  GL_R16F, GL_RED, GL_HALF_FLOAT_OES,
-  GL_R32F, GL_RED, GL_FLOAT,
-  GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE,
-  GL_R8I, GL_RED_INTEGER, GL_BYTE,
-  GL_R16UI, GL_RED_INTEGER, GL_UNSIGNED_SHORT,
-  GL_R16I, GL_RED_INTEGER, GL_SHORT,
-  GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT,
-  GL_R32I, GL_RED_INTEGER, GL_INT,
-};
-
-int normalizeInternalFormat(int internalformat, int format, int type) {
-  if (internalformat == GL_RED || internalformat == GL_RG || internalformat == GL_RGB || internalformat == GL_RGBA) {
-    for (size_t i = 0; i < sizeof(formatMap)/3; i++) {
-      int b = formatMap[i * 3 + 1];
-      int c = formatMap[i * 3 + 2];
-      if (format == b && type == c) {
-        int a = formatMap[i * 3 + 0];
-        internalformat = a;
-        break;
-      }
-    }
-  }
-  return internalformat;
-}
-
-int getImageFormat(Local<Value> arg) {
-  if (arg->IsArrayBufferView()) {
-    return -1;
-  } else {
-    Local<Value> constructorName = JS_OBJ(JS_OBJ(arg)->Get(JS_STR("constructor")))->Get(JS_STR("name"));
-    if (
-      constructorName->StrictEquals(JS_STR("HTMLImageElement")) ||
-      constructorName->StrictEquals(JS_STR("HTMLVideoElement")) ||
-      constructorName->StrictEquals(JS_STR("ImageData")) ||
-      constructorName->StrictEquals(JS_STR("ImageBitmap")) ||
-      constructorName->StrictEquals(JS_STR("HTMLCanvasElement"))
-    ) {
-      return GL_RGBA;
-    } else {
-      return -1;
-    }
-  }
-}
-
-size_t getArrayBufferViewElementSize(Local<ArrayBufferView> arrayBufferView) {
-  if (arrayBufferView->IsFloat64Array()) {
-    return 8;
-  } else if (arrayBufferView->IsFloat32Array() || arrayBufferView->IsUint32Array() || arrayBufferView->IsInt32Array()) {
-    return 4;
-  } else if (arrayBufferView->IsUint16Array() || arrayBufferView->IsInt16Array()) {
-    return 2;
-  } else {
-    return 1;
-  }
-}
-
-NAN_METHOD(WebGLRenderingContext::TexImage2D) {
-  Isolate *isolate = Isolate::GetCurrent();
-
-  Local<Value> target = info[0];
-  Local<Value> level = info[1];
-  Local<Value> internalformat = info[2];
-  Local<Value> width = info[3];
-  Local<Value> height = info[4];
-  Local<Value> border = info[5];
-  Local<Value> format = info[6];
-  Local<Value> type = info[7];
-  Local<Value> pixels = info[8];
-  Local<Value> srcOffset = info[9];
-
-  Local<String> widthString = String::NewFromUtf8(isolate, "width", NewStringType::kInternalized).ToLocalChecked();
-  Local<String> heightString = String::NewFromUtf8(isolate, "height", NewStringType::kInternalized).ToLocalChecked();
-
-  if (info.Length() == 6) {
-    // width is now format, height is now type, and border is now pixels
-    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
-    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
-    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
-    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
-    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
-    if (
-      !targetNumber.IsEmpty() &&
-      !levelNumber.IsEmpty() && !internalformatNumber.IsEmpty() &&
-      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
-      (border->IsNull() || hasWidthHeight(border))
-    ) {
-      pixels=border;
-      /* if (pixels) {
-        pixels = _getImageData(pixels);
-      } */
-      type=height;
-      format=width;
-      width = TO_BOOL(border) ? JS_OBJ(border)->Get(widthString) : Number::New(isolate, 1).As<Value>();
-      height = TO_BOOL(border) ? JS_OBJ(border)->Get(heightString) : Number::New(isolate, 1).As<Value>();
-      // return _texImage2D(target, level, internalformat, width, height, 0, format, type, pixels);
-    } else {
-      /* LOGI("Loaded string asset %d %d %d %d %d %d %d %d %d",
-        target->TypeOf(isolate)->StrictEquals(numberString),
-        level->TypeOf(isolate)->StrictEquals(numberString),
-        internalformat->TypeOf(isolate)->StrictEquals(numberString),
-        width->TypeOf(isolate)->StrictEquals(numberString),
-        height->TypeOf(isolate)->StrictEquals(numberString),
-        border->IsNull(), // 0
-        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString), // 1
-        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString) && border->ToObject()->Get(widthString)->TypeOf(isolate)->StrictEquals(numberString), // 0
-        !border->IsNull() && border->TypeOf(isolate)->StrictEquals(objectString) && border->ToObject()->Get(heightString)->TypeOf(isolate)->StrictEquals(numberString) // 0
-      ); */
-
-      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number format, number type, Image pixels)");
-      return;
-    }
-  } else if (info.Length() == 9) {
-    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
-    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
-    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
-    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
-    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
-    MaybeLocal<Number> formatNumber(Nan::To<Number>(format));
-    MaybeLocal<Number> typeNumber(Nan::To<Number>(type));
-    if (
-      !targetNumber.IsEmpty() &&
-      !levelNumber.IsEmpty() && !internalformat.IsEmpty() &&
-      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
-      !formatNumber.IsEmpty() && !typeNumber.IsEmpty() &&
-      (pixels->IsNull() || pixels->IsObject() || pixels->IsNumber())
-    ) {
-      // nothing
-    } else {
-      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView pixels)");
-      return;
-    }
-  } else if (info.Length() == 10) {
-    MaybeLocal<Number> targetNumber(Nan::To<Number>(target));
-    MaybeLocal<Number> levelNumber(Nan::To<Number>(level));
-    MaybeLocal<Number> internalformatNumber(Nan::To<Number>(internalformat));
-    MaybeLocal<Number> widthNumber(Nan::To<Number>(width));
-    MaybeLocal<Number> heightNumber(Nan::To<Number>(height));
-    MaybeLocal<Number> formatNumber(Nan::To<Number>(format));
-    MaybeLocal<Number> typeNumber(Nan::To<Number>(type));
-    MaybeLocal<Number> srcOffsetNumber(Nan::To<Number>(srcOffset));
-    if (
-      !targetNumber.IsEmpty() &&
-      !levelNumber.IsEmpty() && !internalformat.IsEmpty() &&
-      !widthNumber.IsEmpty() && !heightNumber.IsEmpty() &&
-      !formatNumber.IsEmpty() && !typeNumber.IsEmpty()
-    ) {
-      if (pixels->IsArrayBufferView() && !srcOffsetNumber.IsEmpty()) {
-        Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
-        size_t srcOffsetInt = TO_UINT32(srcOffset);
-        size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
-        size_t extraOffset = srcOffsetInt * elementSize;
-        pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
-      } else if (pixels->IsNull() || pixels->IsObject()) {
-        // nothing
-      } else {
-        Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView srcData, number srcOffset)");
-        return;
-      }
-    } else {
-      Nan::ThrowError("Expected texImage2D(number target, number level, number internalformat, number width, number height, number border, number format, number type, ArrayBufferView srcData, number srcOffset)");
-      return;
-    }
-  } else {
-    Nan::ThrowError("Bad texture argument");
-    return;
-  }
-
-  GLenum targetV = TO_UINT32(target);
-  GLenum levelV = TO_UINT32(level);
-  GLenum internalformatV = TO_UINT32(internalformat);
-  GLsizei widthV = TO_UINT32(width);
-  GLsizei heightV = TO_UINT32(height);
-  GLint borderV = TO_INT32(border);
-  GLenum formatV = TO_UINT32(format);
-  GLenum typeV = TO_UINT32(type);
-
-  internalformatV = normalizeInternalFormat(internalformatV, formatV, typeV);
-
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-
-  GLuint texV;
-  char *pixelsV;
-  if (pixels->IsNull()) {
-    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, NULL);
-  } else if (pixels->IsNumber()) {
-    GLintptr offsetV = TO_UINT32(pixels);
-    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, (void *)offsetV);
-  } else if ((texV = getImageTexture(pixels)) != 0) {
-    glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, NULL);
-
-    GLuint fbos[2];
-    glGenFramebuffers(2, fbos);
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
-
-    if (gl->flipY) {
-      glBlitFramebuffer(
-        0, 0, widthV, heightV,
-        0, 0, widthV, heightV,
-        GL_COLOR_BUFFER_BIT,
-        GL_NEAREST
-      );
-    } else {
-      glBlitFramebuffer(
-        0, heightV, widthV, 0,
-        0, 0, widthV, heightV,
-        GL_COLOR_BUFFER_BIT,
-        GL_NEAREST
-      );
-    }
-
-    // glCopyTexImage2D(targetV, levelV, internalformatV, 0, 0, widthV, heightV, 0);
-
-    glDeleteFramebuffers(2, fbos);
-
-    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
-    } else {
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
-    }
-    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
-    } else {
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
-    }
-  } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
-    size_t formatSize = getFormatSize(formatV);
-    size_t typeSize = getTypeSize(typeV);
-    size_t pixelSize = formatSize * typeSize;
-    int srcFormatV = getImageFormat(pixels);
-    size_t srcFormatSize = getFormatSize(srcFormatV);
-    char *pixelsV2;
-    unique_ptr<char[]> pixelsV2Buffer;
-    bool needsReformat = srcFormatV != -1 && formatSize != srcFormatSize;
-    if (needsReformat) {
-      pixelsV2Buffer.reset(new char[widthV * heightV * pixelSize]);
-      pixelsV2 = pixelsV2Buffer.get();
-      reformatImageData(pixelsV2, pixelsV, formatSize * typeSize, srcFormatSize * typeSize, widthV * heightV);
-
-      glPixelStorei(GL_PACK_ALIGNMENT, 1);
-      glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    } else {
-      pixelsV2 = pixelsV;
-    }
-
-    if (gl->flipY && !pixels->IsArrayBufferView()) {
-      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
-
-      flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
-
-      glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, pixelsV3Buffer.get());
-    } else if (formatV == GL_LUMINANCE || formatV == GL_ALPHA) {
-      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * 4]);
-
-      if (typeV == GL_UNSIGNED_BYTE) {
-        expandLuminance<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_UNSIGNED_INT) {
-        expandLuminance<unsigned int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_INT) {
-        expandLuminance<int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_UNSIGNED_SHORT) {
-        expandLuminance<unsigned short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_SHORT) {
-        expandLuminance<short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_FLOAT) {
-        expandLuminance<float>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else {
-        expandLuminance<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      }
-
-      glTexImage2D(targetV, levelV, GL_RGBA8, widthV, heightV, borderV, GL_RGBA, typeV, pixelsV3Buffer.get());
-    } else if (formatV == GL_LUMINANCE_ALPHA) {
-      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * 4]);
-
-      if (typeV == GL_UNSIGNED_BYTE) {
-        expandLuminanceAlpha<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_UNSIGNED_INT) {
-        expandLuminanceAlpha<unsigned int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_INT) {
-        expandLuminanceAlpha<int>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_UNSIGNED_SHORT) {
-        expandLuminanceAlpha<unsigned short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_SHORT) {
-        expandLuminanceAlpha<short>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else if (typeV == GL_FLOAT) {
-        expandLuminanceAlpha<float>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      } else {
-        expandLuminanceAlpha<unsigned char>(pixelsV3Buffer.get(), pixelsV2, widthV, heightV);
-      }
-
-      glTexImage2D(targetV, levelV, GL_RGBA8, widthV, heightV, borderV, GL_RGBA, typeV, pixelsV3Buffer.get());
-    } else {
-      glTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, formatV, typeV, pixelsV2);
-    }
-
-    if (needsReformat) {
-      glPixelStorei(GL_PACK_ALIGNMENT, gl->packAlignment);
-      glPixelStorei(GL_UNPACK_ALIGNMENT, gl->unpackAlignment);
-    }
-  } else {
-    Nan::ThrowError("WebGLRenderingContext::TexImage2D: invalid texture argument");
-  }
-}
-
-NAN_METHOD(WebGLRenderingContext::CompressedTexImage2D) {
-  Isolate *isolate = Isolate::GetCurrent();
-
-  if (info[0]->IsNumber() && info[1]->IsNumber() && info[2]->IsNumber() && info[3]->IsNumber() && info[4]->IsNumber() && info[5]->IsNumber()) {
-    char *dataV;
-    size_t dataLengthV;
-    if (info[6]->IsArrayBufferView()) {
-      Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(info[6]);
-      Local<ArrayBuffer> buffer = arrayBufferView->Buffer();
-      dataV = (char *)buffer->GetContents().Data() + arrayBufferView->ByteOffset();
-      dataLengthV = arrayBufferView->ByteLength();
-    } else if (info[6]->IsNull()) {
-      dataV = nullptr;
-      dataLengthV = 0;
-    } else {
-      return Nan::ThrowError("compressedTexImage2D: invalid arguments");
-    }
-
-    Local<Value> target = info[0];
-    Local<Value> level = info[1];
-    Local<Value> internalformat = info[2];
-    Local<Value> width = info[3];
-    Local<Value> height = info[4];
-    Local<Value> border = info[5];
-
-    int targetV = TO_INT32(target);
-    int levelV = TO_INT32(level);
-    int internalformatV = TO_INT32(internalformat);
-    int widthV = TO_INT32(width);
-    int heightV = TO_INT32(height);
-    int borderV = TO_INT32(border);
-
-    glCompressedTexImage2D(targetV, levelV, internalformatV, widthV, heightV, borderV, dataLengthV, dataV);
-  } else {
-    Nan::ThrowError("compressedTexImage2D: invalid arguments");
-  }
-}
 
 NAN_METHOD(WebGLRenderingContext::TexParameteri) {
   int target = TO_INT32(info[0]);
@@ -3100,11 +3856,13 @@ NAN_METHOD(WebGLRenderingContext::TexParameterf) {
 
 NAN_METHOD(WebGLRenderingContext::Clear) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLint arg = TO_INT32(info[0]);
+  if (gl->clearEnabled || (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER) && gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER) != gl->defaultFramebuffer)) {
+    GLint arg = TO_INT32(info[0]);
 
-  glClear(arg);
+    glClear(arg);
 
-  gl->dirty = true;
+    gl->dirty = true;
+  }
 }
 
 
@@ -3118,8 +3876,12 @@ NAN_METHOD(WebGLRenderingContext::UseProgram) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CreateBuffer) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint buffer;
   glGenBuffers(1, &buffer);
+
+  gl->objectCache.buffers.insert(buffer);
 
   Local<Object> bufferObject = Nan::New<Object>();
   bufferObject->Set(JS_STR("id"), JS_INT(buffer));
@@ -3154,9 +3916,19 @@ NAN_METHOD(WebGLRenderingContext::BindBuffer) {
 NAN_METHOD(WebGLRenderingContext::BindBufferBase) {
   GLenum target = TO_UINT32(info[0]);
   GLuint index = TO_UINT32(info[1]);
-  GLuint buffer = TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id")));
+  GLuint buffer = info[2]->IsObject() ? TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id"))) : 0;
 
   glBindBufferBase(target, index, buffer);
+}
+
+NAN_METHOD(WebGLRenderingContext::BindBufferRange) {
+  GLenum target = TO_UINT32(info[0]);
+  GLuint index = TO_UINT32(info[1]);
+  GLuint buffer = info[2]->IsObject() ? TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id"))) : 0;
+  GLintptr offset = TO_UINT32(info[3]);
+  GLsizei size = TO_UINT32(info[4]);
+
+  glBindBufferRange(target, index, buffer, offset, size);
 }
 
 NAN_METHOD(WebGLRenderingContext::CreateFramebuffer) {
@@ -3179,8 +3951,8 @@ NAN_METHOD(WebGLRenderingContext::BindFramebuffer) {
 
   gl->SetFramebufferBinding(target, framebuffer);
   if (target == GL_FRAMEBUFFER) {
-    gl->SetFramebufferBinding(target == GL_DRAW_FRAMEBUFFER, framebuffer);
-    gl->SetFramebufferBinding(target == GL_READ_FRAMEBUFFER, framebuffer);
+    gl->SetFramebufferBinding(GL_DRAW_FRAMEBUFFER, framebuffer);
+    gl->SetFramebufferBinding(GL_READ_FRAMEBUFFER, framebuffer);
   }
 }
 
@@ -3205,17 +3977,29 @@ NAN_METHOD(WebGLRenderingContext::FramebufferTexture2D) {
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
+NAN_METHOD(WebGLRenderingContext::FramebufferTextureLayer) {
+  GLenum target = TO_UINT32(info[0]);
+  GLenum attachment = TO_INT32(info[1]);
+  GLuint texture = info[2]->IsObject() ? TO_UINT32(JS_OBJ(info[2])->Get(JS_STR("id"))) : 0;
+  GLint level = TO_INT32(info[3]);
+  GLint layer = TO_INT32(info[4]);
+
+  glFramebufferTextureLayer(target, attachment, texture, level, layer);
+
+  // info.GetReturnValue().Set(Nan::Undefined());
+}
+
 NAN_METHOD(WebGLRenderingContext::BlitFramebuffer) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
 
-  int sx = TO_UINT32(info[0]);
-  int sy = TO_UINT32(info[1]);
-  int sw = TO_UINT32(info[2]);
-  int sh = TO_UINT32(info[3]);
-  int dx = TO_UINT32(info[4]);
-  int dy = TO_UINT32(info[5]);
-  int dw = TO_UINT32(info[6]);
-  int dh = TO_UINT32(info[7]);
+  int sx = TO_INT32(info[0]);
+  int sy = TO_INT32(info[1]);
+  int sw = TO_INT32(info[2]);
+  int sh = TO_INT32(info[3]);
+  int dx = TO_INT32(info[4]);
+  int dy = TO_INT32(info[5]);
+  int dw = TO_INT32(info[6]);
+  int dh = TO_INT32(info[7]);
   GLbitfield mask = TO_UINT32(info[8]);
   GLenum filter = TO_UINT32(info[9]);
 
@@ -3231,6 +4015,34 @@ NAN_METHOD(WebGLRenderingContext::BlitFramebuffer) {
   gl->dirty = true;
 
   // info.GetReturnValue().Set(Nan::Undefined());
+}
+
+NAN_METHOD(WebGLRenderingContext::InvalidateFramebuffer) {
+  GLenum target = TO_UINT32(info[0]);
+  Local<Array> attachments = Local<Array>::Cast(info[1]);
+
+  std::vector<GLenum> attachmentsV(attachments->Length());
+  for (int i = 0; i < attachments->Length(); i++) {
+    attachmentsV[i] = TO_UINT32(attachments->Get(i));
+  }
+
+  glInvalidateFramebuffer(target, attachmentsV.size(), attachmentsV.data());
+}
+
+NAN_METHOD(WebGLRenderingContext::InvalidateSubFramebuffer) {
+  GLenum target = TO_UINT32(info[0]);
+  Local<Array> attachments = Local<Array>::Cast(info[1]);
+  GLint x = TO_UINT32(info[2]);
+  GLint y = TO_UINT32(info[3]);
+  GLsizei width = TO_UINT32(info[4]);
+  GLsizei height = TO_UINT32(info[5]);
+
+  std::vector<GLenum> attachmentsV(attachments->Length());
+  for (int i = 0; i < attachments->Length(); i++) {
+    attachmentsV[i] = TO_UINT32(attachments->Get(i));
+  }
+
+  glInvalidateSubFramebuffer(target, attachmentsV.size(), attachmentsV.data(), x, y, width, height);
 }
 
 NAN_METHOD(WebGLRenderingContext::BufferData) {
@@ -3310,6 +4122,47 @@ NAN_METHOD(WebGLRenderingContext::BufferSubData) {
   glBufferSubData(target, dstOffset, size, data);
 }
 
+NAN_METHOD(WebGLRenderingContext::CopyBufferSubData) {
+  GLenum readTarget = TO_UINT32(info[0]);
+  GLenum writeTarget = TO_UINT32(info[1]);
+  GLintptr readOffset = TO_INT32(info[2]);
+  GLintptr writeOffset = TO_INT32(info[3]);
+  GLsizei size = TO_INT32(info[4]);
+
+  glCopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size);
+}
+
+NAN_METHOD(WebGLRenderingContext::GetBufferSubData) {
+  GLenum target = TO_UINT32(info[0]);
+  GLintptr srcByteOffset = TO_INT32(info[1]);
+  Local<ArrayBufferView> dstData = Local<ArrayBufferView>::Cast(info[2]);
+  char *data = (char *)dstData->Buffer()->GetContents().Data() + dstData->ByteOffset();
+  size_t dataLength = dstData->ByteLength();
+  if (info[3]->IsNumber()) {
+    GLuint dstOffset = TO_UINT32(info[3]);
+    data += dstOffset;
+    dataLength -= dstOffset;
+  }
+  if (info[4]->IsNumber()) {
+    GLuint length = TO_UINT32(info[4]);
+    dataLength = std::min<size_t>(dataLength, length);
+  }
+
+#if defined(ANDROID) && !defined(LUMIN)
+  void *mapping = glMapBufferRange(target, srcByteOffset, dataLength, GL_MAP_READ_BIT);
+  if (mapping != nullptr) {
+    memcpy(data, mapping, dataLength);
+    glUnmapBuffer(target);
+  }
+#else
+  glGetBufferSubData(target, srcByteOffset, dataLength, data);
+#endif
+}
+
+NAN_METHOD(WebGLRenderingContext::ReadBuffer) {
+  GLenum src = TO_UINT32(info[0]);
+  glReadBuffer(src);
+}
 
 NAN_METHOD(WebGLRenderingContext::BlendEquation) {
   GLint mode = TO_INT32(info[0]);
@@ -3666,6 +4519,90 @@ NAN_METHOD(WebGLRenderingContext::DrawBuffersWEBGL) {
   // info.GetReturnValue().Set(Nan::Undefined());
 }
 
+NAN_METHOD(WebGLRenderingContext::ClearBufferfv) {
+  GLenum buffer = TO_UINT32(info[0]);
+  GLint drawBuffer = TO_INT32(info[1]);
+  Local<Value> valuesValue = info[3];
+  GLint srcOffset = info[4]->IsNumber() ? TO_INT32(info[1]) : 0;
+
+  if (valuesValue->IsArray()) {
+    Local<Array> valuesArray = Local<Array>::Cast(valuesValue);
+    size_t length = std::max<size_t>(valuesArray->Length() - srcOffset, 0);
+    if (length > 0) {
+      std::vector<GLfloat> values(length);
+      for (size_t i = 0; i < length; i++) {
+        values[i] = TO_FLOAT(valuesArray->Get(i + srcOffset));
+      }
+      glClearBufferfv(buffer, drawBuffer, values.data());
+    }
+  } else if (valuesValue->IsFloat32Array()) {
+    Local<Float32Array> valuesFloat32Array = Local<Float32Array>::Cast(valuesValue);
+    GLfloat *values = (GLfloat *)((char *)valuesFloat32Array->Buffer()->GetContents().Data() + valuesFloat32Array->ByteOffset());
+    glClearBufferfv(buffer, drawBuffer, values);
+  } else {
+    Nan::ThrowError("ClearBufferfv: Invalid arguments");
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::ClearBufferiv) {
+  GLenum buffer = TO_UINT32(info[0]);
+  GLint drawBuffer = TO_INT32(info[1]);
+  Local<Value> valuesValue = info[3];
+  GLint srcOffset = info[4]->IsNumber() ? TO_INT32(info[1]) : 0;
+
+  if (valuesValue->IsArray()) {
+    Local<Array> valuesArray = Local<Array>::Cast(valuesValue);
+    size_t length = std::max<size_t>(valuesArray->Length() - srcOffset, 0);
+    if (length > 0) {
+      std::vector<GLint> values(length);
+      for (size_t i = 0; i < length; i++) {
+        values[i] = TO_INT32(valuesArray->Get(i + srcOffset));
+      }
+      glClearBufferiv(buffer, drawBuffer, values.data());
+    }
+  } else if (valuesValue->IsInt32Array()) {
+    Local<Int32Array> valuesInt32Array = Local<Int32Array>::Cast(valuesValue);
+    GLint *values = (GLint *)((char *)valuesInt32Array->Buffer()->GetContents().Data() + valuesInt32Array->ByteOffset());
+    glClearBufferiv(buffer, drawBuffer, values);
+  } else {
+    Nan::ThrowError("ClearBufferiv: Invalid arguments");
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::ClearBufferuiv) {
+  GLenum buffer = TO_UINT32(info[0]);
+  GLint drawBuffer = TO_INT32(info[1]);
+  Local<Value> valuesValue = info[3];
+  GLint srcOffset = info[4]->IsNumber() ? TO_INT32(info[1]) : 0;
+
+  if (valuesValue->IsArray()) {
+    Local<Array> valuesArray = Local<Array>::Cast(valuesValue);
+    size_t length = std::max<size_t>(valuesArray->Length() - srcOffset, 0);
+    if (length > 0) {
+      std::vector<GLuint> values(length);
+      for (size_t i = 0; i < length; i++) {
+        values[i] = TO_UINT32(valuesArray->Get(i + srcOffset));
+      }
+      glClearBufferuiv(buffer, drawBuffer, values.data());
+    }
+  } else if (valuesValue->IsUint32Array()) {
+    Local<Uint32Array> valuesUint32Array = Local<Uint32Array>::Cast(valuesValue);
+    GLuint *values = (GLuint *)((char *)valuesUint32Array->Buffer()->GetContents().Data() + valuesUint32Array->ByteOffset());
+    glClearBufferuiv(buffer, drawBuffer, values);
+  } else {
+    Nan::ThrowError("ClearBufferiv: Invalid arguments");
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::ClearBufferfi) {
+  GLenum buffer = TO_UINT32(info[0]);
+  GLint drawBuffer = TO_INT32(info[1]);
+  GLfloat depth = TO_FLOAT(info[2]);
+  GLint stencil = TO_INT32(info[3]);
+
+  glClearBufferfi(buffer, drawBuffer, depth, stencil);
+}
+
 NAN_METHOD(WebGLRenderingContext::BlendColor) {
   GLclampf r = TO_FLOAT(info[0]);
   GLclampf g = TO_FLOAT(info[1]);
@@ -3840,8 +4777,6 @@ NAN_METHOD(WebGLRenderingContext::StencilFunc) {
   GLuint mask = TO_INT32(info[2]);
 
   glStencilFunc(func, ref, mask);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilFuncSeparate) {
@@ -3851,16 +4786,12 @@ NAN_METHOD(WebGLRenderingContext::StencilFuncSeparate) {
   GLuint mask = TO_INT32(info[3]);
 
   glStencilFuncSeparate(face, func, ref, mask);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilMask) {
   GLuint mask = TO_UINT32(info[0]);
 
   glStencilMask(mask);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilMaskSeparate) {
@@ -3868,8 +4799,6 @@ NAN_METHOD(WebGLRenderingContext::StencilMaskSeparate) {
   GLuint mask = TO_UINT32(info[1]);
 
   glStencilMaskSeparate(face, mask);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilOp) {
@@ -3878,8 +4807,6 @@ NAN_METHOD(WebGLRenderingContext::StencilOp) {
   GLenum zpass = TO_INT32(info[2]);
 
   glStencilOp(fail, zfail, zpass);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::StencilOpSeparate) {
@@ -3889,8 +4816,6 @@ NAN_METHOD(WebGLRenderingContext::StencilOpSeparate) {
   GLenum zpass = TO_INT32(info[3]);
 
   glStencilOpSeparate(face, fail, zfail, zpass);
-
-  // info.GetReturnValue().Set(Nan::Undefined());
 }
 
 NAN_METHOD(WebGLRenderingContext::BindRenderbuffer) {
@@ -3907,8 +4832,12 @@ NAN_METHOD(WebGLRenderingContext::BindRenderbuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::CreateRenderbuffer) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint renderbuffer;
   glGenRenderbuffers(1, &renderbuffer);
+
+  gl->objectCache.renderbuffers.insert(renderbuffer);
 
   Local<Object> renderbufferObject = Nan::New<Object>();
   renderbufferObject->Set(JS_STR("id"), JS_INT(renderbuffer));
@@ -3916,9 +4845,13 @@ NAN_METHOD(WebGLRenderingContext::CreateRenderbuffer) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteBuffer) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint buffer = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
 
   glDeleteBuffers(1, &buffer);
+
+  gl->objectCache.buffers.erase(buffer);
 
   // info.GetReturnValue().Set(Nan::Undefined());
 }
@@ -3938,7 +4871,11 @@ NAN_METHOD(WebGLRenderingContext::DeleteProgram) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteRenderbuffer) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint renderbuffer = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  gl->objectCache.renderbuffers.erase(renderbuffer);
 
   glDeleteRenderbuffers(1, &renderbuffer);
 
@@ -3954,7 +4891,11 @@ NAN_METHOD(WebGLRenderingContext::DeleteShader) {
 }
 
 NAN_METHOD(WebGLRenderingContext::DeleteTexture) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint texture = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  gl->objectCache.samplers.erase(texture);
 
   glDeleteTextures(1, &texture);
 
@@ -3986,7 +4927,7 @@ NAN_METHOD(WebGLRenderingContext::GetVertexAttribOffset) {
 
   glGetVertexAttribPointerv(index, pname, &ret);
 
-  info.GetReturnValue().Set(JS_INT(ToGLuint(ret)));
+  info.GetReturnValue().Set(JS_INT(toGLuint(ret)));
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderPrecisionFormat) {
@@ -4109,8 +5050,16 @@ NAN_METHOD(WebGLRenderingContext::RenderbufferStorage) {
   GLsizei height = TO_UINT32(info[3]);
 
   glRenderbufferStorage(target, internalformat, width, height);
+}
 
-  // info.GetReturnValue().Set(Nan::Undefined());
+NAN_METHOD(WebGLRenderingContext::RenderbufferStorageMultisample) {
+  GLenum target = TO_UINT32(info[0]);
+  GLsizei samples = TO_UINT32(info[1]);
+  GLenum internalformat = TO_UINT32(info[2]);
+  GLsizei width = TO_UINT32(info[3]);
+  GLsizei height = TO_UINT32(info[4]);
+
+  glRenderbufferStorageMultisample(target, samples, internalformat, width, height);
 }
 
 NAN_METHOD(WebGLRenderingContext::GetShaderSource) {
@@ -4134,107 +5083,6 @@ NAN_METHOD(WebGLRenderingContext::ValidateProgram) {
   glValidateProgram(programId);
 }
 
-NAN_METHOD(WebGLRenderingContext::TexSubImage2D) {
-  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
-  GLenum targetV = TO_UINT32(info[0]);
-  GLint levelV = TO_INT32(info[1]);
-  GLint xoffsetV = TO_INT32(info[2]);
-  GLint yoffsetV = TO_INT32(info[3]);
-  GLsizei widthV = TO_UINT32(info[4]);
-  GLsizei heightV = TO_UINT32(info[5]);
-  GLenum formatV = TO_INT32(info[6]);
-  GLenum typeV = TO_INT32(info[7]);
-  Local<Value> pixels = info[8];
-  Local<Value> srcOffset = info[9];
-
-  if (pixels->IsArrayBufferView() && srcOffset->IsNumber()) {
-    Local<ArrayBufferView> arrayBufferView = Local<ArrayBufferView>::Cast(pixels);
-    size_t srcOffsetInt = TO_UINT32(srcOffset);
-    size_t elementSize = getArrayBufferViewElementSize(arrayBufferView);
-    size_t extraOffset = srcOffsetInt * elementSize;
-    pixels = Uint8Array::New(arrayBufferView->Buffer(), arrayBufferView->ByteOffset() + extraOffset, arrayBufferView->ByteLength() - extraOffset);
-  }
-
-  GLuint texV;
-  char *pixelsV;
-  if (pixels->IsNull()) {
-    glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, nullptr);
-  } else if (pixels->IsNumber()) {
-    GLintptr offsetV = TO_UINT32(pixels);
-    glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, (void *)offsetV);
-  } else if ((texV = getImageTexture(pixels)) != 0) {
-    GLuint fbos[2];
-    glGenFramebuffers(2, fbos);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texV, 0);
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, targetV, gl->HasTextureBinding(gl->activeTexture, targetV) ? gl->GetTextureBinding(gl->activeTexture, targetV) : 0, 0);
-
-    if (gl->flipY) {
-      glBlitFramebuffer(
-        0, 0, widthV, heightV,
-        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
-        GL_COLOR_BUFFER_BIT,
-        GL_NEAREST
-      );
-    } else {
-      glBlitFramebuffer(
-        0, heightV, widthV, 0,
-        xoffsetV, yoffsetV, xoffsetV + widthV, yoffsetV + heightV,
-        GL_COLOR_BUFFER_BIT,
-        GL_NEAREST
-      );
-    }
-
-    // glCopyTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, 0, 0, widthV, heightV);
-
-    glDeleteFramebuffers(2, fbos);
-
-    if (gl->HasFramebufferBinding(GL_READ_FRAMEBUFFER)) {
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->GetFramebufferBinding(GL_READ_FRAMEBUFFER));
-    } else {
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->defaultFramebuffer);
-    }
-    if (gl->HasFramebufferBinding(GL_DRAW_FRAMEBUFFER)) {
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
-    } else {
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl->defaultFramebuffer);
-    }
-  } else if ((pixelsV = (char *)getImageData(pixels)) != nullptr) {
-    size_t formatSize = getFormatSize(formatV);
-    size_t typeSize = getTypeSize(typeV);
-    size_t pixelSize = formatSize * typeSize;
-    char *pixelsV2;
-    unique_ptr<char[]> pixelsV2Buffer;
-    if (formatSize != 4 && !pixels->IsArrayBufferView()) {
-      pixelsV2Buffer.reset(new char[widthV * heightV * pixelSize]);
-      pixelsV2 = pixelsV2Buffer.get();
-      reformatImageData(pixelsV2, pixelsV, formatSize * typeSize, 4 * typeSize, widthV * heightV);
-    } else {
-      pixelsV2 = pixelsV;
-    }
-
-    if (gl->flipY && !pixels->IsArrayBufferView()) {
-      unique_ptr<char[]> pixelsV3Buffer(new char[widthV * heightV * pixelSize]);
-      flipImageData(pixelsV3Buffer.get(), pixelsV2, widthV, heightV, pixelSize);
-
-      glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, pixelsV3Buffer.get());
-    } else {
-      glTexSubImage2D(targetV, levelV, xoffsetV, yoffsetV, widthV, heightV, formatV, typeV, pixelsV2);
-    }
-  } else {
-    Nan::ThrowError("Invalid texture argument");
-  }
-
-  /* if (pixels != nullptr) {
-    int elementSize = num / width / height;
-    for (int y = 0; y < height; y++) {
-      memcpy(&(texPixels[(height - 1 - y) * width * elementSize]), &pixels[y * width * elementSize], width * elementSize);
-    }
-  } */
-}
-
 NAN_METHOD(WebGLRenderingContext::TexStorage2D) {
   WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
   GLenum target = TO_UINT32(info[0]);
@@ -4244,6 +5092,18 @@ NAN_METHOD(WebGLRenderingContext::TexStorage2D) {
   GLsizei height = TO_UINT32(info[4]);
 
   glTexStorage2D(target, levels, internalFormat, width, height);
+}
+
+NAN_METHOD(WebGLRenderingContext::TexStorage3D) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+  GLenum target = TO_UINT32(info[0]);
+  GLint levels = TO_INT32(info[1]);
+  GLenum internalFormat = TO_UINT32(info[2]);
+  GLsizei width = TO_UINT32(info[3]);
+  GLsizei height = TO_UINT32(info[4]);
+  GLsizei depth = TO_UINT32(info[5]);
+
+  glTexStorage3D(target, levels, internalFormat, width, height, depth);
 }
 
 NAN_METHOD(WebGLRenderingContext::ReadPixels) {
@@ -4285,7 +5145,7 @@ NAN_METHOD(WebGLRenderingContext::GetTexParameter) {
 
   glGetTexParameteriv(target, pname, &value);
 
-  info.GetReturnValue().Set(Nan::New<Number>(value));
+  info.GetReturnValue().Set(JS_INT(value));
 }
 
 NAN_METHOD(WebGLRenderingContext::GetActiveAttrib) {
@@ -4355,6 +5215,18 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
   GLenum name = TO_INT32(info[0]);
 
   switch (name) {
+    case GL_RED_BITS:
+    case GL_GREEN_BITS:
+    case GL_BLUE_BITS:
+    case GL_ALPHA_BITS:
+    case GL_STENCIL_BITS: {
+      info.GetReturnValue().Set(JS_INT(8));
+      break;
+    }
+    case GL_DEPTH_BITS: {
+      info.GetReturnValue().Set(JS_INT(24));
+      break;
+    }
     case GL_BLEND:
     case GL_CULL_FACE:
     case GL_DEPTH_TEST:
@@ -4371,7 +5243,6 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
       info.GetReturnValue().Set(JS_BOOL(static_cast<bool>(params)));
       break;
     }
-    case GL_ALPHA_BITS:
     case GL_BLEND_DST_ALPHA:
     case GL_BLEND_DST_RGB:
     case GL_BLEND_EQUATION:
@@ -4379,13 +5250,10 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     // case GL_BLEND_EQUATION_RGB: // === GL_BLEND_EQUATION
     case GL_BLEND_SRC_ALPHA:
     case GL_BLEND_SRC_RGB:
-    case GL_BLUE_BITS:
     case GL_CULL_FACE_MODE:
-    case GL_DEPTH_BITS:
     case GL_DEPTH_FUNC:
     case GL_FRONT_FACE:
     case GL_GENERATE_MIPMAP_HINT:
-    case GL_GREEN_BITS:
     case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
     case GL_IMPLEMENTATION_COLOR_READ_TYPE:
     case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
@@ -4399,7 +5267,6 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
     case GL_MAX_VERTEX_UNIFORM_VECTORS:
     case GL_PACK_ALIGNMENT:
-    case GL_RED_BITS:
     case GL_SAMPLE_BUFFERS:
     case GL_SAMPLES:
     case GL_STENCIL_BACK_FAIL:
@@ -4409,7 +5276,6 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     case GL_STENCIL_BACK_REF:
     case GL_STENCIL_BACK_VALUE_MASK:
     case GL_STENCIL_BACK_WRITEMASK:
-    case GL_STENCIL_BITS:
     case GL_STENCIL_CLEAR_VALUE:
     case GL_STENCIL_FAIL:
     case GL_STENCIL_FUNC:
@@ -4463,6 +5329,7 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     case GL_MAX_VERTEX_UNIFORM_BLOCKS:
     case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
     case GL_MIN_PROGRAM_TEXEL_OFFSET:
+    case GL_MAX_VIEWS_OVR:
     {
       // return an int
       GLint param;
@@ -4595,17 +5462,15 @@ NAN_METHOD(WebGLRenderingContext::GetParameter) {
     case UNPACK_FLIP_Y_WEBGL: {
       WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
       // return a boolean
-      GLboolean params;
-      glGetBooleanv(name, &params);
-      info.GetReturnValue().Set(JS_BOOL(gl->flipY));
+      const bool flipY = gl->HasPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_FLIP_Y_WEBGL) : false;
+      info.GetReturnValue().Set(JS_BOOL(flipY));
       break;
     }
     case UNPACK_PREMULTIPLY_ALPHA_WEBGL: {
       WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
       // return a boolean
-      GLboolean params;
-      glGetBooleanv(name, &params);
-      info.GetReturnValue().Set(JS_BOOL(gl->premultiplyAlpha));
+      const bool premultiplyAlpha = gl->HasPixelStoreiBinding(UNPACK_PREMULTIPLY_ALPHA_WEBGL) ? (bool)gl->GetPixelStoreiBinding(UNPACK_PREMULTIPLY_ALPHA_WEBGL) : true;
+      info.GetReturnValue().Set(JS_BOOL(premultiplyAlpha));
       break;
     }
     case MAX_CLIENT_WAIT_TIMEOUT_WEBGL:
@@ -4823,11 +5688,82 @@ NAN_METHOD(WebGLRenderingContext::GetVertexAttrib) {
       info.GetReturnValue().Set(createTypedArray<Float32Array>(4, vertex_attribs));
       break;
     }
-    default:
+    default: {
       Nan::ThrowError("GetVertexAttrib: Invalid Enum");
+      break;
+    }
   }
+}
 
-  //info.GetReturnValue().Set(Nan::Undefined());
+NAN_METHOD(WebGLRenderingContext::GetIndexedParameter) {
+  GLenum target = TO_UINT32(info[0]);
+  GLuint index = TO_UINT32(info[1]);
+
+  switch (target) {
+    case GL_TRANSFORM_FEEDBACK_BUFFER_BINDING: {
+      GLint data;
+      glGetIntegeri_v(GL_TRANSFORM_FEEDBACK_BUFFER_BINDING, index, &data);
+      if (data != 0) {
+        Local<Object> result = Nan::New<Object>();
+        result->Set(JS_STR("id"), JS_INT(data));
+        info.GetReturnValue().Set(result);
+      } else {
+        info.GetReturnValue().Set(Nan::Null());
+      }
+      break;
+    }
+    case GL_TRANSFORM_FEEDBACK_BUFFER_SIZE: {
+      GLint64 data;
+      glGetInteger64i_v(GL_TRANSFORM_FEEDBACK_BUFFER_SIZE, index, &data);
+      info.GetReturnValue().Set(JS_INT(static_cast<GLint>(data)));
+      break;
+    }
+    case GL_TRANSFORM_FEEDBACK_BUFFER_START: {
+      GLint64 data;
+      glGetInteger64i_v(GL_TRANSFORM_FEEDBACK_BUFFER_START, index, &data);
+      info.GetReturnValue().Set(JS_INT(static_cast<GLint>(data)));
+      break;
+    }
+    case GL_UNIFORM_BUFFER_BINDING: {
+      GLint data;
+      glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, index, &data);
+      if (data != 0) {
+        Local<Object> result = Nan::New<Object>();
+        result->Set(JS_STR("id"), JS_INT(data));
+        info.GetReturnValue().Set(result);
+      } else {
+        info.GetReturnValue().Set(Nan::Null());
+      }
+      break;
+    }
+    case GL_UNIFORM_BUFFER_SIZE: {
+      GLint64 data;
+      glGetInteger64i_v(GL_UNIFORM_BUFFER_SIZE, index, &data);
+      info.GetReturnValue().Set(JS_INT(static_cast<GLint>(data)));
+      break;
+    }
+    case GL_UNIFORM_BUFFER_START: {
+      GLint64 data;
+      glGetInteger64i_v(GL_UNIFORM_BUFFER_START, index, &data);
+      info.GetReturnValue().Set(JS_INT(static_cast<GLint>(data)));
+      break;
+    }
+    default: {
+      info.GetReturnValue().Set(Nan::Null());
+      break;
+    }
+  }
+}
+
+NAN_METHOD(WebGLRenderingContext::GetFragDataLocation) {
+  GLuint program = TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id")));
+  Local<String> name = Local<String>::Cast(info[1]);
+
+  Nan::Utf8String nameUtf8String(Local<String>::Cast(info[0]));
+  const char *nameV = *nameUtf8String;
+
+  GLint result = glGetFragDataLocation(program, nameV);
+  info.GetReturnValue().Set(result);
 }
 
 const char *webglExtensions[] = {
@@ -4847,6 +5783,8 @@ const char *webglExtensions[] = {
   "OES_texture_half_float",
   "OES_texture_half_float_linear",
   "OES_vertex_array_object",
+  "OVR_multiview_multisampled_render_to_texture",
+  "OVR_multiview2",
   "WEBGL_color_buffer_float",
   "WEBGL_compressed_texture_astc",
   "WEBGL_compressed_texture_atc",
@@ -4862,8 +5800,6 @@ const char *webglExtensions[] = {
   "WEBGL_lose_context",
 };
 NAN_METHOD(WebGLRenderingContext::GetSupportedExtensions) {
-  // GLint numExtensions;
-  // glGetIntegerv(GL_NUM_EXTENSIONS, &numExtensions);
 
   int numExtensions = sizeof(webglExtensions)/sizeof(webglExtensions[0]);
   Local<Array> result = Nan::New<Array>(numExtensions);
@@ -4871,11 +5807,6 @@ NAN_METHOD(WebGLRenderingContext::GetSupportedExtensions) {
     // char *extension = (char *)glGetStringi(GL_EXTENSIONS, i);
     result->Set(i, JS_STR(webglExtensions[i]));
   }
-
-  /* for (GLint i = 0; i < numExtensions; i++) {
-    char *extension = (char *)glGetStringi(GL_EXTENSIONS, i);
-    result->Set(i, JS_STR(extension));
-  } */
 
   info.GetReturnValue().Set(result);
 }
@@ -4996,6 +5927,19 @@ NAN_METHOD(WebGLRenderingContext::GetExtension) {
     result->Set(JS_STR("RGBA16F_EXT"), JS_INT(GL_RGBA16F_EXT));
     result->Set(JS_STR("UNSIGNED_NORMALIZED_EXT"), JS_INT(GL_UNSIGNED_NORMALIZED_EXT));
     info.GetReturnValue().Set(result);
+  } else if (strcmp(sname, "OVR_multiview2") == 0) {
+    // Add constants: khronos.org/registry/webgl/extensions/OVR_multiview2/
+    Local<Object> result = Object::New(Isolate::GetCurrent());
+    result->Set(JS_STR("FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR"), JS_INT(0x9630));
+    result->Set(JS_STR("FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR"), JS_INT(0x9632));
+    result->Set(JS_STR("MAX_VIEWS_OVR"), JS_INT(0x9631));
+    result->Set(JS_STR("FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR"), JS_INT(0x9633));
+    Nan::SetMethod(result, "framebufferTextureMultiviewOVR", FramebufferTextureMultiviewOVR);
+    info.GetReturnValue().Set(result);
+  } else if (strcmp(sname, "OVR_multiview_multisampled_render_to_texture") == 0) {
+    Local<Object> result = Object::New(Isolate::GetCurrent());
+    Nan::SetMethod(result, "FramebufferTextureMultisampleMultiviewOVR", FramebufferTextureMultisampleMultiviewOVR);
+    info.GetReturnValue().Set(result);
   } else if (strcmp(sname, "EXT_blend_minmax") == 0) {
     // Adds two constants: developer.mozilla.org/docs/Web/API/EXT_blend_minmax
     Local<Object> result = Object::New(Isolate::GetCurrent());
@@ -5023,7 +5967,7 @@ NAN_METHOD(WebGLRenderingContext::GetExtension) {
   }
 }
 
-NAN_METHOD(WebGLRenderingContext::GetContextAttributes) {
+/* NAN_METHOD(WebGLRenderingContext::GetContextAttributes) {
   Local<Object> result = Object::New(Isolate::GetCurrent());
   result->Set(JS_STR("alpha"), JS_BOOL(true));
   result->Set(JS_STR("antialias"), JS_BOOL(true));
@@ -5033,7 +5977,7 @@ NAN_METHOD(WebGLRenderingContext::GetContextAttributes) {
   result->Set(JS_STR("preserveDrawingBuffer"), JS_BOOL(false));
   result->Set(JS_STR("stencil"), JS_BOOL(false));
   info.GetReturnValue().Set(result);
-}
+} */
 
 NAN_METHOD(WebGLRenderingContext::CheckFramebufferStatus) {
   GLenum target = TO_INT32(info[0]);
@@ -5169,6 +6113,8 @@ std::pair<Local<Object>, Local<FunctionTemplate>> WebGL2RenderingContext::Initia
   Nan::SetMethod(proto, "pauseTransformFeedback", glCallWrap<PauseTransformFeedback>);
   Nan::SetMethod(proto, "resumeTransformFeedback", glCallWrap<ResumeTransformFeedback>);
 
+  Nan::SetMethod(proto, "getInternalformatParameter", glCallWrap<GetInternalformatParameter>);
+
   Nan::SetMethod(proto, "createSampler", glCallWrap<CreateSampler>);
   Nan::SetMethod(proto, "deleteSampler", glCallWrap<DeleteSampler>);
   Nan::SetMethod(proto, "isSampler", glCallWrap<IsSampler>);
@@ -5193,8 +6139,12 @@ NAN_METHOD(WebGL2RenderingContext::New) {
 
 // reference used https://www.khronos.org/registry/OpenGL-Refpages/es3.0/
 NAN_METHOD(WebGL2RenderingContext::CreateQuery) { // adapted from CreateBuffer
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint queryId;
   glGenQueries(1, &queryId);
+
+  gl->objectCache.queries.insert(queryId);
 
   Local<Object> queryObject = Nan::New<Object>();
   queryObject->Set(JS_STR("id"), JS_INT(queryId));
@@ -5265,7 +6215,11 @@ NAN_METHOD(WebGL2RenderingContext::IsQuery) { // adapted from IsVertexArray
 }
 
 NAN_METHOD(WebGL2RenderingContext::DeleteQuery) { // adapted from DeleteBuffer
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint query = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  gl->objectCache.queries.erase(query);
 
   glDeleteQueries(1, &query);
 }
@@ -5360,9 +6314,35 @@ NAN_METHOD(WebGL2RenderingContext::ResumeTransformFeedback) {
   glResumeTransformFeedback();
 }
 
+NAN_METHOD(WebGL2RenderingContext::GetInternalformatParameter) {
+  GLenum target = TO_UINT32(info[0]);
+  GLenum internalformat = TO_UINT32(info[1]);
+  GLenum pname = TO_UINT32(info[2]);
+
+  if (pname == GL_SAMPLES) {
+    GLint numSamples = 0;
+    glGetInternalformativ(target, internalformat, GL_NUM_SAMPLE_COUNTS, 1, &numSamples);
+
+    GLsizei bufSize = numSamples;
+    Local<ArrayBuffer> paramsArrayBuffer = ArrayBuffer::New(Isolate::GetCurrent(), bufSize * sizeof(GLint));
+    Local<Int32Array> paramsInt32Array = Int32Array::New(paramsArrayBuffer, 0, bufSize);
+    if (numSamples > 0) {
+      glGetInternalformativ(target, internalformat, GL_SAMPLES, bufSize, (GLint *)paramsArrayBuffer->GetContents().Data());
+    }
+
+    info.GetReturnValue().Set(paramsInt32Array);
+  } else {
+    info.GetReturnValue().Set(Nan::Null());
+  }
+}
+
 NAN_METHOD(WebGL2RenderingContext::CreateSampler) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint samplerId;
   glGenSamplers(1, &samplerId);
+
+  gl->objectCache.samplers.insert(samplerId);
 
   Local<Object> samplerObject = Nan::New<Object>();
   samplerObject->Set(JS_STR("id"), JS_INT(samplerId));
@@ -5370,7 +6350,11 @@ NAN_METHOD(WebGL2RenderingContext::CreateSampler) {
 }
 
 NAN_METHOD(WebGL2RenderingContext::DeleteSampler) {
+  WebGLRenderingContext *gl = ObjectWrap::Unwrap<WebGLRenderingContext>(info.This());
+
   GLuint sampler = info[0]->IsObject() ? TO_UINT32(JS_OBJ(info[0])->Get(JS_STR("id"))) : 0;
+
+  gl->objectCache.samplers.erase(sampler);
 
   glDeleteSamplers(1, &sampler);
 }
@@ -5388,7 +6372,7 @@ NAN_METHOD(WebGL2RenderingContext::IsSampler) {
 
 NAN_METHOD(WebGL2RenderingContext::BindSampler) {
   GLuint unit = TO_UINT32(info[0]);
-  GLuint sampler = TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id")));
+  GLuint sampler = info[1]->IsObject() ? TO_UINT32(JS_OBJ(info[1])->Get(JS_STR("id"))) : 0;
 
   glBindSampler(unit, sampler);
 }

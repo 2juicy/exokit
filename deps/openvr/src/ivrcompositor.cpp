@@ -8,6 +8,7 @@
 #include <openvr.h>
 #include <ivrsystem.h>
 #include <functional>
+#include <exout>
 
 using namespace v8;
 
@@ -43,8 +44,7 @@ VRPoseRes::VRPoseRes(Local<Function> cb) : cb(cb) {}
 VRPoseRes::~VRPoseRes() {}
 
 //=============================================================================
-NAN_MODULE_INIT(IVRCompositor::Init)
-{
+void IVRCompositor::Init(Nan::Persistent<v8::Function> &constructor) {
   // Create a function template that is called in JS to create this wrapper.
   Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
 
@@ -60,10 +60,11 @@ NAN_MODULE_INIT(IVRCompositor::Init)
   Nan::SetPrototypeMethod(tpl, "Submit", Submit);
 
   // Set a static constructor function to reference the `New` function template.
-  constructor().Reset(Nan::GetFunction(tpl).ToLocalChecked());
+  constructor.Reset(Nan::GetFunction(tpl).ToLocalChecked());
 
   uv_sem_init(&vr::reqSem, 0);
-  uv_async_init(uv_default_loop(), &vr::resAsync, vr::RunResInMainThread);
+  uv_loop_t *loop = windowsystembase::GetEventLoop();
+  uv_async_init(loop, &vr::resAsync, vr::RunResInMainThread);
   vr::reqThead = std::thread([]() -> void {
     for (;;) {
       uv_sem_wait(&vr::reqSem);
@@ -99,7 +100,12 @@ Local<Object> IVRCompositor::NewInstance(vr::IVRCompositor *compositor)
 IVRCompositor::IVRCompositor(vr::IVRCompositor *self)
 : self_(self)
 {
-  // Do nothing.
+  {
+    vr::EVRInputError error = vr::VRInput()->GetActionSetHandle("/actions/default", &actionSetHandle);
+    if (error != vr::EVRInputError::VRInputError_None) {
+      Nan::ThrowError("Failed to get default action set handle");
+    }
+  }
 }
 
 //=============================================================================
@@ -124,7 +130,7 @@ NAN_METHOD(IVRCompositor::New)
   info.GetReturnValue().Set(info.This());
 }
 
-NAN_METHOD(IVRCompositor::WaitGetPoses)
+/* NAN_METHOD(IVRCompositor::WaitGetPoses)
 {
   IVRCompositor* obj = ObjectWrap::Unwrap<IVRCompositor>(info.Holder());
 
@@ -195,7 +201,7 @@ NAN_METHOD(IVRCompositor::WaitGetPoses)
       }
     }
   }
-}
+} */
 
 void setPoseMatrix(float *dstMatrixArray, const vr::HmdMatrix34_t &srcMatrix) {
   for (unsigned int v = 0; v < 4; v++) {
@@ -232,6 +238,12 @@ NAN_METHOD(IVRCompositor::RequestGetPoses) {
     vr::reqCbs.push_back([obj, system, hmdArray, leftControllerArray, rightControllerArray, trackerArraysStart, vrPoseRes]() -> void {
       TrackedDevicePoseArray trackedDevicePoseArray;
 	    obj->self_->WaitGetPoses(trackedDevicePoseArray.data(), static_cast<uint32_t>(trackedDevicePoseArray.size()), nullptr, 0);
+
+      vr::VRActiveActionSet_t activeActionSet;
+      activeActionSet.ulActionSet = obj->actionSetHandle;
+      activeActionSet.ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+      activeActionSet.nPriority = 0;
+      vr::VRInput()->UpdateActionState(&activeActionSet, sizeof(activeActionSet), 1);
 
       const float identityMatrix[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
       memcpy(hmdArray, identityMatrix, sizeof(identityMatrix));
@@ -298,24 +310,23 @@ NAN_METHOD(IVRCompositor::Submit)
 {
   IVRCompositor* obj = ObjectWrap::Unwrap<IVRCompositor>(info.Holder());
 
-  if (info.Length() != 2)
+  if (info.Length() != 1)
   {
     Nan::ThrowError("Wrong number of arguments.");
     return;
   }
 
-  if (!(info[0]->IsObject() && info[1]->IsNumber()))
+  if (!info[0]->IsNumber())
   {
-    Nan::ThrowError("Expected arguments (object, number).");
+    Nan::ThrowError("Expected arguments (number).");
     return;
   }
 
-  WebGLRenderingContext *gl = node::ObjectWrap::Unwrap<WebGLRenderingContext>(Local<Object>::Cast(info[0]));
-  GLuint texture = TO_UINT32(info[1]);
+  GLuint tex = TO_UINT32(info[0]);
 
   vr::EColorSpace colorSpace = vr::ColorSpace_Gamma;
 
-  vr::Texture_t leftEyeTexture = {(void *)(size_t)texture, vr::TextureType_OpenGL, colorSpace};
+  vr::Texture_t leftEyeTexture = {(void *)(size_t)tex, vr::TextureType_OpenGL, colorSpace};
   vr::VRTextureBounds_t leftEyeTextureBounds = {
     0, 0,
     0.5, 1,
@@ -337,7 +348,7 @@ NAN_METHOD(IVRCompositor::Submit)
     return;
   }
 
-  vr::Texture_t rightEyeTexture = {(void *)(size_t)texture, vr::TextureType_OpenGL, colorSpace};
+  vr::Texture_t rightEyeTexture = {(void *)(size_t)tex, vr::TextureType_OpenGL, colorSpace};
   vr::VRTextureBounds_t rightEyeTextureBounds = {
     0.5, 0,
     1, 1,
@@ -360,22 +371,6 @@ NAN_METHOD(IVRCompositor::Submit)
   }
 
   obj->self_->PostPresentHandoff();
-
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D)) {
-    glBindTexture(GL_TEXTURE_2D, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D));
-  } else {
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE)) {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_2D_MULTISAMPLE));
-  } else {
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-  }
-  if (gl->HasTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP)) {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, gl->GetTextureBinding(gl->activeTexture, GL_TEXTURE_CUBE_MAP));
-  } else {
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  }
 }
 
 NAN_METHOD(NewCompositor) {

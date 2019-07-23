@@ -16,8 +16,6 @@ Nan::Persistent<v8::Function> oculusMobileContextConstructor;
 Nan::Persistent<v8::Object> oculusMobileContext;
 
 NAN_METHOD(OculusMobile_Init) {
-  std::cout << "OculusMobile_Init 1" << std::endl;
-
   Local<Array> windowHandleArray = Local<Array>::Cast(info[0]);
 
   if (oculusMobileContextConstructor.IsEmpty()) {
@@ -39,8 +37,6 @@ NAN_METHOD(OculusMobile_Init) {
 }
 
 NAN_METHOD(OculusMobile_Shutdown) {
-  std::cout << "OculusMobile_Shutdown" << std::endl;
-
   Local<Object> oculusMobileContextObj = Nan::New(oculusMobileContext);
   OculusMobileContext *omc = ObjectWrap::Unwrap<OculusMobileContext>(oculusMobileContextObj);
   omc->Destroy();
@@ -50,9 +46,24 @@ NAN_METHOD(OculusMobile_Shutdown) {
 }
 
 NAN_METHOD(OculusMobile_IsHmdPresent) {
-  std::cout << "OculusMobile_IsHmdPresent" << std::endl;
-
   info.GetReturnValue().Set(Nan::New<Boolean>(true));
+}
+
+NAN_METHOD(OculusMobile_GetDeviceType) {
+  const char* id;
+  Local<String> result;
+  int deviceType = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_DEVICE_TYPE);
+  if (deviceType >= VRAPI_DEVICE_TYPE_GEARVR_START && deviceType <= VRAPI_DEVICE_TYPE_GEARVR_END) {
+    id = "GearVR";
+  }
+  if (deviceType >= VRAPI_DEVICE_TYPE_OCULUSGO_START && deviceType <= VRAPI_DEVICE_TYPE_OCULUSGO_END) {
+    id = "OculusGo";
+  }
+  if (deviceType >= VRAPI_DEVICE_TYPE_OCULUSQUEST_START && deviceType <= VRAPI_DEVICE_TYPE_OCULUSQUEST_END) {
+    id = "OculusQuest";
+  }
+
+  info.GetReturnValue().Set(Nan::New<String>(id).ToLocalChecked());
 }
 
 }
@@ -62,9 +73,10 @@ Local<Object> makeOculusMobileVr() {
 
   Local<Object> exports = Object::New(Isolate::GetCurrent());
 
-  exports->Set(Nan::New("OculusMobile_Init").ToLocalChecked(), Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_Init)->GetFunction());
-  exports->Set(Nan::New("OculusMobile_Shutdown").ToLocalChecked(), Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_Shutdown)->GetFunction());
-  exports->Set(Nan::New("OculusMobile_IsHmdPresent").ToLocalChecked(), Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_IsHmdPresent)->GetFunction());
+  exports->Set(Nan::New("OculusMobile_Init").ToLocalChecked(), Nan::GetFunction(Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_Init)).ToLocalChecked());
+  exports->Set(Nan::New("OculusMobile_Shutdown").ToLocalChecked(), Nan::GetFunction(Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_Shutdown)).ToLocalChecked());
+  exports->Set(Nan::New("OculusMobile_IsHmdPresent").ToLocalChecked(), Nan::GetFunction(Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_IsHmdPresent)).ToLocalChecked());
+  exports->Set(Nan::New("OculusMobile_GetDeviceType").ToLocalChecked(), Nan::GetFunction(Nan::New<v8::FunctionTemplate>(oculusmobile::OculusMobile_GetDeviceType)).ToLocalChecked());
 
   return scope.Escape(exports);
 }

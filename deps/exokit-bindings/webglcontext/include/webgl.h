@@ -70,6 +70,10 @@
 #define MAX_CLIENT_WAIT_TIMEOUT_WEBGL ((uint32_t)2e7)
 
 #include <defines.h>
+#include <exout>
+#include <vector>
+#include <map>
+#include <set>
 
 #if !defined(ANDROID) && !defined(LUMIN)
 #include <glfw/include/glfw.h>
@@ -77,12 +81,33 @@
 #include <egl/include/egl.h>
 #endif
 
+#if defined(ANDROID) || defined(LUMIN)
+typedef void (*PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVR)(GLenum, GLenum, GLuint, GLint, GLint, GLsizei);
+extern PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVR glFramebufferTextureMultiviewOVRExt;
+typedef void (GL_APIENTRY* PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR)(GLenum target, GLenum attachment, GLuint texture, GLint level, GLsizei samples, GLint baseViewIndex, GLsizei numViews);
+extern PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR glFramebufferTextureMultisampleMultiviewOVRExt;
+#endif
+
 using namespace v8;
 using namespace node;
+
+class GlObjectCache {
+public:
+  std::set<GLuint> buffers;
+  std::set<GLuint> queries;
+  std::set<GLuint> renderbuffers;
+  std::set<GLuint> samplers;
+  std::set<GLuint> textures;
+};
 
 enum GlKey {
   GL_KEY_COMPOSE,
   GL_KEY_PLANE,
+};
+
+class GlShader {
+public:
+  virtual ~GlShader() = 0;
 };
 
 void flipImageData(char *dstData, char *srcData, size_t width, size_t height, size_t pixelSize);
@@ -181,8 +206,12 @@ public:
   static NAN_METHOD(LinkProgram);
   static NAN_METHOD(GetProgramParameter);
   static NAN_METHOD(GetUniformLocation);
+  static NAN_METHOD(GetUniformIndices);
+  static NAN_METHOD(GetActiveUniforms);
   static NAN_METHOD(GetUniformBlockIndex);
   static NAN_METHOD(UniformBlockBinding);
+  static NAN_METHOD(GetActiveUniformBlockName);
+  static NAN_METHOD(GetActiveUniformBlockParameter);
   static NAN_METHOD(ClearColor);
   static NAN_METHOD(ClearDepth);
   static NAN_METHOD(Disable);
@@ -190,8 +219,12 @@ public:
   static NAN_METHOD(CreateTexture);
   static NAN_METHOD(BindTexture);
   static NAN_METHOD(FlipTextureData);
-  static NAN_METHOD(TexImage2D);
-  static NAN_METHOD(CompressedTexImage2D);
+  // static NAN_METHOD(TexImage2D);
+  // static NAN_METHOD(TexImage3D);
+  // static NAN_METHOD(CompressedTexImage2D);
+  // static NAN_METHOD(CompressedTexImage3D);
+  // static NAN_METHOD(CompressedTexSubImage2D);
+  // static NAN_METHOD(CompressedTexSubImage3D);
   static NAN_METHOD(TexParameteri);
   static NAN_METHOD(TexParameterf);
   static NAN_METHOD(Clear);
@@ -199,13 +232,20 @@ public:
   static NAN_METHOD(CreateBuffer);
   static NAN_METHOD(BindBuffer);
   static NAN_METHOD(BindBufferBase);
+  static NAN_METHOD(BindBufferRange);
   static NAN_METHOD(CreateFramebuffer);
   static NAN_METHOD(BindFramebuffer);
   static NAN_METHOD(BindFramebufferRaw);
   static NAN_METHOD(FramebufferTexture2D);
+  static NAN_METHOD(FramebufferTextureLayer);
   static NAN_METHOD(BlitFramebuffer);
+  static NAN_METHOD(InvalidateFramebuffer);
+  static NAN_METHOD(InvalidateSubFramebuffer);
   static NAN_METHOD(BufferData);
   static NAN_METHOD(BufferSubData);
+  static NAN_METHOD(CopyBufferSubData);
+  static NAN_METHOD(GetBufferSubData);
+  static NAN_METHOD(ReadBuffer);
   static NAN_METHOD(BlendEquation);
   static NAN_METHOD(BlendFunc);
   static NAN_METHOD(EnableVertexAttribArray);
@@ -237,6 +277,10 @@ public:
   static NAN_METHOD(VertexAttribDivisorANGLE);
   static NAN_METHOD(DrawBuffers);
   static NAN_METHOD(DrawBuffersWEBGL);
+  static NAN_METHOD(ClearBufferfv);
+  static NAN_METHOD(ClearBufferiv);
+  static NAN_METHOD(ClearBufferuiv);
+  static NAN_METHOD(ClearBufferfi);
 
   static NAN_METHOD(BlendColor);
   static NAN_METHOD(BlendEquationSeparate);
@@ -286,11 +330,14 @@ public:
   static NAN_METHOD(IsSync);
 
   static NAN_METHOD(RenderbufferStorage);
+  static NAN_METHOD(RenderbufferStorageMultisample);
   static NAN_METHOD(GetShaderSource);
   static NAN_METHOD(ValidateProgram);
 
-  static NAN_METHOD(TexSubImage2D);
+  // static NAN_METHOD(TexSubImage2D);
+  // static NAN_METHOD(TexSubImage3D);
   static NAN_METHOD(TexStorage2D);
+  static NAN_METHOD(TexStorage3D);
 
   static NAN_METHOD(ReadPixels);
   static NAN_METHOD(GetTexParameter);
@@ -304,10 +351,12 @@ public:
   static NAN_METHOD(GetRenderbufferParameter);
   static NAN_METHOD(GetUniform);
   static NAN_METHOD(GetVertexAttrib);
+  static NAN_METHOD(GetIndexedParameter);
+  static NAN_METHOD(GetFragDataLocation);
   static NAN_METHOD(GetSupportedExtensions);
   static NAN_METHOD(GetExtension);
-  static NAN_METHOD(GetContextAttributes);
-  
+  // static NAN_METHOD(GetContextAttributes);
+
   static NAN_METHOD(CheckFramebufferStatus);
 
   static NAN_METHOD(CreateVertexArray);
@@ -328,8 +377,14 @@ public:
   static NAN_GETTER(DrawingBufferWidthGetter);
   static NAN_GETTER(DrawingBufferHeightGetter);
 
-  static NAN_METHOD(GetFramebuffer);
+  static NAN_METHOD(FramebufferTextureMultiviewOVR);
+  static NAN_METHOD(FramebufferTextureMultisampleMultiviewOVR);
+
+  static NAN_METHOD(GetBoundFramebuffer);
+  static NAN_METHOD(GetDefaultFramebuffer);
   static NAN_METHOD(SetDefaultFramebuffer);
+  static NAN_METHOD(SetClearEnabled);
+  static NAN_METHOD(LoadSubTexture);
 
   void SetVertexArrayBinding(GLuint vao) {
     vertexArrayBindings[GL_VERTEX_SHADER] = vao;
@@ -391,15 +446,23 @@ public:
     return programBindings.find(GL_VERTEX_SHADER) != programBindings.end();
   }
 
+  void SetPixelStoreiBinding(GLenum pname, GLint param) {
+    pixelStoreiBindings[pname] = param;
+  }
+  GLuint GetPixelStoreiBinding(GLenum pname) {
+    return pixelStoreiBindings[pname];
+  }
+  bool HasPixelStoreiBinding(GLenum pname) {
+    return pixelStoreiBindings.find(pname) != pixelStoreiBindings.end();
+  }
+
   bool live;
   NATIVEwindow *windowHandle;
   GLuint defaultVao;
-  bool dirty;
   GLuint defaultFramebuffer;
-  bool flipY;
-  bool premultiplyAlpha;
-  GLint packAlignment;
-  GLint unpackAlignment;
+  GlObjectCache objectCache;
+  bool clearEnabled;
+  bool dirty;
   GLuint activeTexture;
   std::map<GLenum, GLuint> vertexArrayBindings;
   std::map<GLenum, GLuint> framebufferBindings;
@@ -407,6 +470,7 @@ public:
   std::map<GLenum, GLuint> bufferBindings;
   std::map<std::pair<GLenum, GLenum>, GLuint> textureBindings;
   std::map<GLenum, GLuint> programBindings;
+  std::map<GLenum, GLint> pixelStoreiBindings;
   ViewportState viewportState;
   ColorMaskState colorMaskState;
   std::map<GlKey, void *> keys;
@@ -420,7 +484,7 @@ public:
   static std::pair<Local<Object>, Local<FunctionTemplate>> Initialize(Isolate *isolate, Local<FunctionTemplate> baseCtor);
 
   static NAN_METHOD(New);
-  
+
   static NAN_METHOD(CreateQuery);
   static NAN_METHOD(BeginQuery);
   static NAN_METHOD(EndQuery);
@@ -428,7 +492,7 @@ public:
   static NAN_METHOD(GetQueryParameter);
   static NAN_METHOD(IsQuery);
   static NAN_METHOD(DeleteQuery);
-  
+
   static NAN_METHOD(CreateTransformFeedback);
   static NAN_METHOD(DeleteTransformFeedback);
   static NAN_METHOD(IsTransformFeedback);
@@ -439,7 +503,9 @@ public:
   static NAN_METHOD(GetTransformFeedbackVarying);
   static NAN_METHOD(PauseTransformFeedback);
   static NAN_METHOD(ResumeTransformFeedback);
-  
+
+  static NAN_METHOD(GetInternalformatParameter);
+
   static NAN_METHOD(CreateSampler);
   static NAN_METHOD(DeleteSampler);
   static NAN_METHOD(IsSampler);
@@ -448,5 +514,32 @@ public:
   static NAN_METHOD(SamplerParameterf);
   static NAN_METHOD(GetSamplerParameter);
 };
+
+template <typename T>
+T *getGlShader(WebGLRenderingContext *gl) {
+  const GlKey &key = T::key;
+  auto iter = gl->keys.find(key);
+  if (iter != gl->keys.end()) {
+    return (T *)iter->second;
+  } else {
+    T *t = new T();
+
+    {
+      if (gl->HasVertexArrayBinding()) {
+        glBindVertexArray(gl->GetVertexArrayBinding());
+      } else {
+        glBindVertexArray(gl->defaultVao);
+      }
+      if (gl->HasBufferBinding(GL_ARRAY_BUFFER)) {
+        glBindBuffer(GL_ARRAY_BUFFER, gl->GetBufferBinding(GL_ARRAY_BUFFER));
+      } else {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+      }
+    }
+
+    gl->keys[key] = t;
+    return t;
+  }
+}
 
 #endif

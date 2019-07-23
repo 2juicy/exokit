@@ -22,6 +22,7 @@
 #include <SkPaint.h>
 #include <SkDrawLooper.h>
 #include <SkBlurDrawLooper.h>
+#include <SkDashPathEffect.h>
 #include <webglcontext/include/webgl.h>
 
 using namespace v8;
@@ -154,6 +155,7 @@ public:
   static NAN_METHOD(CreateLinearGradient);
   static NAN_METHOD(CreateRadialGradient);
   static NAN_METHOD(CreatePattern);
+  static NAN_METHOD(SetLineDash);
   static NAN_METHOD(Resize);
   static NAN_METHOD(DrawImage);
   static NAN_METHOD(CreateImageData);
@@ -165,6 +167,9 @@ public:
   static NAN_METHOD(Destroy);
   static NAN_METHOD(GetWindowHandle);
   static NAN_METHOD(SetWindowHandle);
+  static NAN_METHOD(MakeGrContext);
+  static NAN_METHOD(GetGrContext);
+  static NAN_METHOD(SetGrContext);
   static NAN_METHOD(SetTexture);
 
   static bool isImageType(Local<Value> arg);

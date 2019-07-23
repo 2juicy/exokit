@@ -13,6 +13,7 @@
 #include <SkImage.h>
 #include <nanosvg.h>
 #include <nanosvgrast.h>
+#include <windowsystem.h>
 #include <string>
 #include <thread>
 
@@ -35,7 +36,7 @@ protected:
   static NAN_GETTER(WidthGetter);
   static NAN_GETTER(HeightGetter);
   static NAN_GETTER(DataGetter);
-  static NAN_METHOD(LoadMethod);
+  static NAN_METHOD(Load);
 
   Image();
   ~Image();
@@ -46,8 +47,11 @@ private:
 
   Nan::Persistent<ArrayBuffer> arrayBuffer;
   Nan::Persistent<Function> cbFn;
+  bool loading;
+  bool hasCbFn;
   std::string error;
-  uv_async_t *threadAsyncHandle;
+  uv_async_t threadAsyncHandle;
+  uv_sem_t sem;
 
   friend class CanvasRenderingContext2D;
   friend class ImageData;

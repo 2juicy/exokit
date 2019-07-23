@@ -3,7 +3,7 @@
   <body>
     <script src="three.js"></script>
     <script>
-let renderer, scene, camera, iframe, planeMesh, boxMeshes, controllerMeshes, focused;
+let renderer, scene, camera, session, iframe, planeMesh, boxMeshes, controllerMeshes, focused;
 
 const localVector = new THREE.Vector3();
 const localVector2 = new THREE.Vector3();
@@ -42,7 +42,7 @@ function init() {
     antialias: true,
     alpha: true,
   });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  // renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   // window.browser.magicleap.RequestDepthPopulation(true);
@@ -76,7 +76,7 @@ function init() {
 
   iframe = document.createElement('iframe');
   iframe.d = 2;
-  iframe.src = 'http://lol.com';
+  iframe.src = 'http://google.com';
   iframe.onload = () => {
     iframe.contentWindow.onmessage = m => {
       console.log('parent got message: ' + JSON.stringify(m.data));
@@ -103,9 +103,9 @@ function init() {
     console.log(source + ':' + line + ': ' + message);
   };
   document.body.appendChild(iframe);
-  setTimeout(() => {
+  /* setTimeout(() => {
     iframe.src = 'http://text.com/';
-  }, 2000);
+  }, 2000); */
 
   planeMesh = (() => {
     const geometry = new THREE.PlaneBufferGeometry(planeWorldWidth, planeWorldHeight)
@@ -115,16 +115,13 @@ function init() {
     for (let i = 0; i < numUvs; i++) {
       uvs[i*2+1] = 1 - uvs[i*2+1];
     }
-    /* const material = new THREE.MeshPhongMaterial({
-      color: 0xFFFF00,
-    }); */
     const texture = new THREE.Texture(
       null,
       THREE.UVMapping,
       THREE.ClampToEdgeWrapping,
       THREE.ClampToEdgeWrapping,
-      THREE.NearestFilter,
-      THREE.NearestFilter,
+      THREE.LinearFilter,
+      THREE.LinearFilter,
       THREE.RGBAFormat,
       THREE.UnsignedByteType,
       16
@@ -232,7 +229,14 @@ function init() {
     const coord = planeMesh.projectMouse(e.clientX, e.clientY);
 
     if (coord) {
-      iframe.sendMouseUp(coord.x, coord.y,e.button);
+      iframe.sendMouseUp(coord.x, coord.y, e.button);
+    }
+  });
+  window.addEventListener('click', e => {
+    const coord = planeMesh.projectMouse(e.clientX, e.clientY);
+
+    if (coord) {
+      iframe.sendClick(coord.x, coord.y, e.button);
     }
   });
   window.addEventListener('wheel', e => {
@@ -267,8 +271,6 @@ function init() {
   });
 }
 
-init();
-
 let direction = true;
 const controllerCoords = [
   [0, 0],
@@ -277,95 +279,99 @@ const controllerCoords = [
 const lastPresseds = [false, false];
 function animate(timestamp, frame) {
   try {
-  if (direction) {
-    planeMesh.rotation.y += 0.001;
+  if (planeMesh) {
+    if (direction) {
+      planeMesh.rotation.y += 0.001;
 
-    if (planeMesh.rotation.y >= Math.PI/8) {
-      direction = false;
-    }
-  } else {
-    planeMesh.rotation.y -= 0.001;
+      if (planeMesh.rotation.y >= Math.PI/8) {
+        direction = false;
+      }
+    } else {
+      planeMesh.rotation.y -= 0.001;
 
-    if (planeMesh.rotation.y <= -Math.PI/8) {
-      direction = true;
-    }
-  }
-
-  for (let i = 0; i < controllerMeshes.length; i++) {
-    controllerMeshes[i].visible = false;
-  }
-
-  const inputSources = display.session.getInputSources();
-  for (let i = 0; i < inputSources.length; i++) {
-    const inputSource = inputSources[i];
-    const pose = frame.getInputPose(inputSource);
-
-    const controllerIndex = _getControllerIndex(inputSource);
-    const controllerMesh = controllerMeshes[controllerIndex];
-    controllerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
-    controllerMesh.matrix.decompose(controllerMesh.position, controllerMesh.quaternion, controllerMesh.scale);
-    controllerMesh.updateMatrixWorld(true);
-    controllerMesh.visible = true;
-
-    const leftLine = localLine;
-    const topLine = localLine2;
-    const plane = localPlane;
-    const raycaster = localRaycaster;
-
-    leftLine.start
-      .set(-planeWorldWidth/2, planeWorldHeight/2, 0)
-      .applyMatrix4(planeMesh.matrixWorld);
-    leftLine.end
-      .set(-planeWorldWidth/2, -planeWorldHeight/2, 0)
-      .applyMatrix4(planeMesh.matrixWorld);
-
-    topLine.start
-      .set(-planeWorldWidth/2, planeWorldHeight/2, 0)
-      .applyMatrix4(planeMesh.matrixWorld);
-    topLine.end
-      .set(planeWorldWidth/2, planeWorldHeight / 2, 0)
-      .applyMatrix4(planeMesh.matrixWorld);
-
-    plane.setFromCoplanarPoints(
-      leftLine.start,
-      leftLine.end,
-      topLine.end
-    );
-
-    raycaster.set(controllerMesh.position, localVector.set(0, 0, -1).applyQuaternion(controllerMesh.quaternion));
-    const intersectionPoint = raycaster.ray.intersectPlane(plane, localVector);
-    if (intersectionPoint) {
-      const leftIntersectionPoint = leftLine.closestPointToPoint(intersectionPoint, true, localVector2);
-
-      const topIntersectionPoint = topLine.closestPointToPoint(intersectionPoint, true, localVector3);
-
-      const xFactor = topIntersectionPoint.distanceTo(topLine.start) / planeWorldWidth;
-      const yFactor = leftIntersectionPoint.distanceTo(leftLine.start) / planeWorldHeight;
-      const distance = raycaster.ray.origin.distanceTo(intersectionPoint);
-
-      if (xFactor > 0 && xFactor <= 0.99 && yFactor > 0 && yFactor <= 0.99 && distance < 3) {
-        const SCROLL_SCALE = 3; // constant in libmlservo
-        const x = (xFactor * planeWidth)/SCROLL_SCALE;
-        const y = (yFactor * planeHeight)/SCROLL_SCALE;
-
-        controllerCoords[controllerIndex][0] = x;
-        controllerCoords[controllerIndex][1] = y;
-
-        iframe.sendMouseMove(x, y);
-
-        boxMeshes[controllerIndex].position.copy(intersectionPoint);
-        boxMeshes[controllerIndex].updateMatrixWorld();
+      if (planeMesh.rotation.y <= -Math.PI/8) {
+        direction = true;
       }
     }
   }
 
-  if (focused) {
+  if (controllerMeshes) {
+    for (let i = 0; i < controllerMeshes.length; i++) {
+      controllerMeshes[i].visible = false;
+    }
+  }
+
+  if (session) {
+    const inputSources = session.getInputSources();
+    for (let i = 0; i < inputSources.length; i++) {
+      const inputSource = inputSources[i];
+      const pose = frame.getInputPose(inputSource);
+
+      const controllerIndex = _getControllerIndex(inputSource);
+      const controllerMesh = controllerMeshes[controllerIndex];
+      controllerMesh.matrix.fromArray(pose.targetRay.transformMatrix);
+      controllerMesh.matrix.decompose(controllerMesh.position, controllerMesh.quaternion, controllerMesh.scale);
+      controllerMesh.updateMatrixWorld(true);
+      controllerMesh.visible = true;
+
+      const leftLine = localLine;
+      const topLine = localLine2;
+      const plane = localPlane;
+      const raycaster = localRaycaster;
+
+      leftLine.start
+        .set(-planeWorldWidth/2, planeWorldHeight/2, 0)
+        .applyMatrix4(planeMesh.matrixWorld);
+      leftLine.end
+        .set(-planeWorldWidth/2, -planeWorldHeight/2, 0)
+        .applyMatrix4(planeMesh.matrixWorld);
+
+      topLine.start
+        .set(-planeWorldWidth/2, planeWorldHeight/2, 0)
+        .applyMatrix4(planeMesh.matrixWorld);
+      topLine.end
+        .set(planeWorldWidth/2, planeWorldHeight / 2, 0)
+        .applyMatrix4(planeMesh.matrixWorld);
+
+      plane.setFromCoplanarPoints(
+        leftLine.start,
+        leftLine.end,
+        topLine.end
+      );
+
+      raycaster.set(controllerMesh.position, localVector.set(0, 0, -1).applyQuaternion(controllerMesh.quaternion));
+      const intersectionPoint = raycaster.ray.intersectPlane(plane, localVector);
+      if (intersectionPoint) {
+        const leftIntersectionPoint = leftLine.closestPointToPoint(intersectionPoint, true, localVector2);
+
+        const topIntersectionPoint = topLine.closestPointToPoint(intersectionPoint, true, localVector3);
+
+        const xFactor = topIntersectionPoint.distanceTo(topLine.start) / planeWorldWidth;
+        const yFactor = leftIntersectionPoint.distanceTo(leftLine.start) / planeWorldHeight;
+        const distance = raycaster.ray.origin.distanceTo(intersectionPoint);
+
+        if (xFactor > 0 && xFactor <= 0.99 && yFactor > 0 && yFactor <= 0.99 && distance < 3) {
+          /* const SCROLL_SCALE = 3; // constant in libmlservo
+          const x = (xFactor * planeWidth)/SCROLL_SCALE;
+          const y = (yFactor * planeHeight)/SCROLL_SCALE; */
+          const x = xFactor * planeWidth;
+          const y = yFactor * planeHeight;
+
+          controllerCoords[controllerIndex][0] = x;
+          controllerCoords[controllerIndex][1] = y;
+
+          iframe.sendMouseMove(x, y);
+
+          boxMeshes[controllerIndex].position.copy(intersectionPoint);
+          boxMeshes[controllerIndex].updateMatrixWorld();
+        }
+      }
+    }
+  }
+
+  if (planeMesh && focused) {
     const gamepads = navigator.getGamepads();
     for (let i = 0; i < gamepads.length; i++) {
-      if (i === 1) { // XXX only use right controller
-        continue;
-      }
-
       const gamepad = gamepads[i];
 
       if (gamepad) {
@@ -381,6 +387,21 @@ function animate(timestamp, frame) {
           iframe.sendMouseUp(x, y, 0);
         }
         lastPresseds[i] = pressed;
+
+        const scrollSpeed = 30;
+        let dx = 0;
+        if (axes[0] < -0.5) {
+          dx = scrollSpeed;
+        } else if (axes[0] > 0.5) {
+          dx = -scrollSpeed;
+        }
+        let dy = 0;
+        if (axes[1] < -0.5) {
+          dy = -scrollSpeed;
+        } else if (axes[1] > 0.5) {
+          dy = scrollSpeed;
+        }
+        iframe.sendMouseWheel(0, 0, dx, dy);
 
         /* const padPressed = buttons[0].pressed;
         if (padPressed) {
@@ -415,41 +436,47 @@ function animate(timestamp, frame) {
 
 if (navigator.xr) {
   (async () => {
-    display = await navigator.xr.requestDevice();
-    const session = await display.requestSession({
+    session = await navigator.xr.requestSession({
       exclusive: true,
-    });
-    display.session = session;
+    }).catch(err => Promise.resolve(null));
 
-    session.onselect = e => {
-      console.log('select'); // XXX
-    };
+    if (session) {
+      init();
 
-    session.requestAnimationFrame((timestamp, frame) => {
-      renderer.vr.setSession(session, {
-        frameOfReferenceType: 'stage',
+      session.onselect = e => {
+        console.log('select'); // XXX
+      };
+
+      session.requestAnimationFrame((timestamp, frame) => {
+        renderer.vr.setSession(session, {
+          frameOfReferenceType: 'stage',
+        });
+
+        const {views} = frame.getViewerPose();
+        const viewport = session.baseLayer.getViewport(views[0]);
+        const width = viewport.width;
+        const height = viewport.height;
+
+        renderer.setSize(width * 2, height);
+
+        renderer.setAnimationLoop(null);
+
+        renderer.vr.enabled = true;
+        renderer.vr.setAnimationLoop(animate);
+
+        console.log('running!');
       });
-
-      const viewport = session.baseLayer.getViewport(frame.views[0]);
-      const width = viewport.width;
-      const height = viewport.height;
-
-      renderer.setSize(width * 2, height);
-
-      renderer.setAnimationLoop(null);
-
-      renderer.vr.enabled = true;
-      renderer.vr.setDevice(display);
-      renderer.vr.setAnimationLoop(animate);
-
-      console.log('running!');
-    });
+    } else {
+      console.log('no xr devices');
+    }
   })()
     .catch(err => {
       console.warn(err.stack);
     });
 } else {
   renderer.setAnimationLoop(animate);
+
+  init();
 }
 
     </script>

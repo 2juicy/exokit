@@ -16,26 +16,7 @@
 #include <mutex>
 #include <functional>
 
-#ifndef LUMIN
-
-#include <include/capi/cef_app_capi.h>
-#include <include/cef_client.h>
-#include <include/cef_app.h>
-#include <include/cef_load_handler.h>
-#include <include/cef_render_handler.h>
-
-#include <libcef_dll/cpptoc/app_cpptoc.h>
-#include <libcef_dll/cpptoc/client_cpptoc.h>
-#include <libcef_dll/ctocpp/request_context_ctocpp.h>
-#include <libcef_dll/ctocpp/browser_ctocpp.h>
-
-#include <include/wrapper/cef_library_loader.h>
-
-#else
-
 #include <Servo2D.h>
-
-#endif
 
 using namespace std;
 using namespace v8;
@@ -43,11 +24,7 @@ using namespace node;
 
 namespace browser {
 
-#ifndef LUMIN
-typedef CefRefPtr<CefBrowser> EmbeddedBrowser;
-#else
 typedef std::shared_ptr<Servo2D> EmbeddedBrowser;
-#endif
 
 enum class EmbeddedKeyModifiers {
   SHIFT,
@@ -65,6 +42,7 @@ EmbeddedBrowser createEmbedded(
   GLuint tex,
   int width,
   int height,
+  float scale,
   int *textureWidth,
   int *textureHeight,
   std::function<EmbeddedBrowser()> getBrowser,
@@ -76,11 +54,16 @@ EmbeddedBrowser createEmbedded(
   std::function<void(const std::string &)> onmessage
 );
 void destroyEmbedded(EmbeddedBrowser browser_);
+// void embeddedUpdate();
 void embeddedDoMessageLoopWork();
+std::pair<int, int> getEmbeddedSize(EmbeddedBrowser browser_);
+void setEmbeddedSize(EmbeddedBrowser browser_, int width, int height);
 int getEmbeddedWidth(EmbeddedBrowser browser_);
 void setEmbeddedWidth(EmbeddedBrowser browser_, int width);
 int getEmbeddedHeight(EmbeddedBrowser browser_);
 void setEmbeddedHeight(EmbeddedBrowser browser_, int height);
+float getEmbeddedScale(EmbeddedBrowser browser_);
+void setEmbeddedScale(EmbeddedBrowser browser_, float scale);
 void embeddedGoBack(EmbeddedBrowser browser_);
 void embeddedGoForward(EmbeddedBrowser browser_);
 void embeddedReload(EmbeddedBrowser browser_);
@@ -98,7 +81,7 @@ void embeddedRunJs(EmbeddedBrowser browser_, const std::string &jsString, const 
 void QueueOnBrowserThread(std::function<void()> fn);
 // void QueueOnBrowserThreadFront(std::function<void()> fn);
 
-void RunOnMainThread(std::function<void()> fn);
+// void RunOnMainThread(std::function<void()> fn);
 void QueueOnMainThread(std::function<void()> fn);
 void MainThreadAsync(uv_async_t *handle);
 
