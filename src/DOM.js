@@ -2228,6 +2228,19 @@ class HTMLIFrameElement extends HTMLSrcableElement {
                       event,
                     });
                   },
+                  onpaymentrequest(event) {
+                    if (window.listeners('paymentrequest').length > 0) {
+                      window.dispatchEvent(new CustomEvent('paymentrequest', {
+                        detail: event,
+                      }));
+                    } else {
+                      parentPort.postMessage({
+                        method: 'emit',
+                        type: 'paymentRequest',
+                        event,
+                      });
+                    }
+                  },
                 });
                 this.contentWindow.document = this.contentDocument;
 
@@ -2970,6 +2983,10 @@ class HTMLAudioElement extends HTMLMediaElement {
                 this._dispatchEventOnDocumentReady(new Event('canplay', {target: this}));
                 this._dispatchEventOnDocumentReady(new Event('canplaythrough', {target: this}));
 
+                if (this.autoplay) {
+                  this.play();
+                }
+
                 cb();
               })
               .catch(err => {
@@ -3027,6 +3044,14 @@ class HTMLAudioElement extends HTMLMediaElement {
     if (this.audio) {
       this.audio.duration = duration;
     }
+  }
+
+  get autoplay() {
+    const autoplay = this.getAttribute('autoplay');
+    return !!autoplay || autoplay === '';
+  }
+  set autoplay(autoplay) {
+    this.setAttribute('autoplay', autoplay);
   }
 
   get buffered() {
@@ -3098,7 +3123,8 @@ class HTMLVideoElement extends HTMLMediaElement {
   set height(height) {}
 
   get autoplay() {
-    return this.getAttribute('autoplay');
+    const autoplay = this.getAttribute('autoplay');
+    return !!autoplay || autoplay === '';
   }
   set autoplay(autoplay) {
     this.setAttribute('autoplay', autoplay);
